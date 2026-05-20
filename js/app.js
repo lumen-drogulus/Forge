@@ -45,7 +45,12 @@
       };
     },
     saveSettings(s) { this.set('settings', s); },
-    getCompletedDays() { return this.get('completedDays') || []; }
+    getCompletedDays() { return this.get('completedDays') || []; },
+    getActiveWorkout() { return this.get('activeWorkout'); },
+    saveActiveWorkout(data) {
+      if (data) this.set('activeWorkout', data);
+      else localStorage.removeItem('forge_activeWorkout');
+    }
   };
 
   // ===== INIT =====
@@ -57,9 +62,48 @@
     state.sheetsUrl = settings.sheetsUrl || '';
 
     setupNavigation();
+    restoreActiveWorkout();
     renderTab('home');
     hideSplash();
     registerSW();
+
+    // Save workout state when app goes to background (before OS kills the tab)
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden' && state.workoutActive) {
+        persistWorkoutState();
+      }
+    });
+  }
+
+  function restoreActiveWorkout() {
+    const saved = Store.getActiveWorkout();
+    if (!saved || !saved.activeWorkoutLog) return;
+    // Verify the saved workout matches current cycle position
+    if (saved.cycleIndex !== state.cycleIndex) {
+      Store.saveActiveWorkout(null);
+      return;
+    }
+    state.workoutActive = true;
+    state.workoutPhase = saved.workoutPhase || 'overview';
+    state.currentExerciseIndex = saved.currentExerciseIndex || 0;
+    state.currentSetIndex = saved.currentSetIndex || 0;
+    state.skippedExercises = saved.skippedExercises || [];
+    state.activeWorkoutLog = saved.activeWorkoutLog;
+  }
+
+  function persistWorkoutState() {
+    if (!state.workoutActive) {
+      Store.saveActiveWorkout(null);
+      return;
+    }
+    Store.saveActiveWorkout({
+      cycleIndex: state.cycleIndex,
+      workoutPhase: state.workoutPhase,
+      currentExerciseIndex: state.currentExerciseIndex,
+      currentSetIndex: state.currentSetIndex,
+      skippedExercises: state.skippedExercises,
+      activeWorkoutLog: state.activeWorkoutLog
+    });
   }
 
   function hideSplash() {
@@ -217,6 +261,7 @@
       }))
     };
     renderWorkoutView();
+    persistWorkoutState();
   }
 
   function renderWorkoutView() {
@@ -501,6 +546,7 @@
     }
 
     renderExercise(document.getElementById('main-content'));
+    persistWorkoutState();
   }
 
   function finishExercise() {
@@ -518,6 +564,7 @@
       state.workoutPhase = 'overview';
       renderWorkoutView();
     }
+    persistWorkoutState();
   }
 
   function findNextExercise() {
@@ -548,6 +595,7 @@
       state.workoutPhase = 'overview';
       renderWorkoutView();
     }
+    persistWorkoutState();
   }
 
   function goToExercise(index) {
@@ -555,6 +603,7 @@
     state.currentSetIndex = state.activeWorkoutLog.exercises[index].sets.length;
     state.workoutPhase = 'exercise';
     renderWorkoutView();
+    persistWorkoutState();
   }
 
   function goToWarmup() {
@@ -621,6 +670,7 @@
     state.skippedExercises = [];
     state.activeWorkoutLog = null;
     stopTimer();
+    persistWorkoutState();
   }
 
   function skipRestDay() {
