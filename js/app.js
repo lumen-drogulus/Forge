@@ -1078,6 +1078,43 @@
     URL.revokeObjectURL(url);
   }
 
+  function clearToday() {
+    const today = new Date().toISOString().split('T')[0];
+    const completed = Store.getCompletedDays();
+    const todayEntry = completed.find(c => c.date === today);
+
+    if (!todayEntry) {
+      alert('No workout logged today.');
+      return;
+    }
+
+    if (confirm('Clear today\'s workout? This removes the log and rolls back your cycle position.')) {
+      // Remove from completed days
+      const filtered = completed.filter(c => c.date !== today);
+      Store.set('completedDays', filtered);
+
+      // Remove from logs
+      const logs = Store.getLogs();
+      if (logs[todayEntry.dayId]) {
+        logs[todayEntry.dayId] = logs[todayEntry.dayId].filter(
+          log => !log.completedAt || !log.completedAt.startsWith(today)
+        );
+        if (logs[todayEntry.dayId].length === 0) delete logs[todayEntry.dayId];
+        Store.saveLogs(logs);
+      }
+
+      // Roll back cycle index
+      state.cycleIndex = (state.cycleIndex + 7) % 8;
+      const settings = Store.getSettings();
+      settings.cycleIndex = state.cycleIndex;
+      Store.saveSettings(settings);
+
+      // Clear any active workout
+      resetWorkoutState();
+      renderTab('home');
+    }
+  }
+  
   function clearData() {
     if (confirm('This will delete ALL workout data, PRs, and settings. Are you sure?')) {
       if (confirm('Really? This cannot be undone.')) {
