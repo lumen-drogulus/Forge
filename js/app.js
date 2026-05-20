@@ -1011,6 +1011,14 @@
     return html;
   }
 
+  function toggleWorkoutDetail(idx) {
+    const detail = document.getElementById('workout-detail-' + idx);
+    const chevron = document.getElementById('workout-chevron-' + idx);
+    if (!detail) return;
+    const isOpen = detail.classList.toggle('open');
+    if (chevron) chevron.style.transform = isOpen ? 'rotate(180deg)' : 'rotate(0)';
+  }
+  
   // ===== PR TAB =====
   function renderPRs(el) {
     const prs = Store.getPRs();
