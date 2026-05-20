@@ -935,12 +935,12 @@
       <div class="tracker-link-card">
         <h2>FORGE Tracker</h2>
         <p>Your detailed workout history, trends, charts, and analytics live in Google Sheets for deep review.</p>
-        ${state.sheetsUrl ? `
-          <button class="tracker-open-btn" onclick="window.open('${state.sheetsUrl.replace('/exec','/edit')}', '_blank')">
+        ${Store.getSettings().sheetsViewUrl ? `
+          <button class="tracker-open-btn" onclick="window.open('${Store.getSettings().sheetsViewUrl}', '_blank')">
             <i class="ti ti-external-link"></i> Open tracker
           </button>
         ` : `
-          <p style="color:var(--text-muted);font-size:12px;">Set up your Google Sheets URL in Settings to enable sync and tracking.</p>
+          <p style="color:var(--text-muted);font-size:12px;">Add your Google Sheets view URL in Settings to enable the tracker link.</p>
         `}
       </div>
       ${renderRecentWorkouts()}
@@ -1068,6 +1068,10 @@
           <label style="font-size:13px;color:var(--text-secondary);display:block;margin-bottom:4px;">Google Sheets webhook URL</label>
           <input type="url" class="weight-input" id="settings-sheets" value="${settings.sheetsUrl || ''}" placeholder="https://script.google.com/..." style="width:100%;font-size:13px;">
         </div>
+        <div class="warmup-card">
+          <label style="font-size:13px;color:var(--text-secondary);display:block;margin-bottom:4px;">Google Sheets view URL</label>
+          <input type="url" class="weight-input" id="settings-sheets-view" value="${settings.sheetsViewUrl || ''}" placeholder="https://docs.google.com/spreadsheets/d/..." style="width:100%;font-size:13px;">
+        </div>
         <button class="start-btn power" onclick="FORGE.saveSettings()">SAVE SETTINGS</button>
         <div style="margin-top:16px;">
           <button class="action-btn" onclick="FORGE.exportData()" style="width:100%;justify-content:center;">
@@ -1092,7 +1096,8 @@
     const bw = parseFloat(document.getElementById('settings-bw').value) || 180;
     const cycle = parseInt(document.getElementById('settings-cycle').value) || 1;
     const sheets = document.getElementById('settings-sheets').value || '';
-
+    const sheetsView = document.getElementById('settings-sheets-view').value || '';
+    
     state.bodyWeight = bw;
     state.cycleIndex = Math.max(0, Math.min(7, cycle - 1));
     state.sheetsUrl = sheets;
@@ -1101,7 +1106,8 @@
       bodyWeight: bw,
       cycleIndex: state.cycleIndex,
       weightUnit: state.weightUnit,
-      sheetsUrl: sheets
+      sheetsUrl: sheets,
+      sheetsViewUrl: sheetsView
     });
 
     alert('Settings saved.');
