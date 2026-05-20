@@ -911,7 +911,7 @@
 
     content.innerHTML = `
       <div class="info-panel-title">${ex.name}</div>
-      <img class="info-panel-image" src="images/${ex.image}" alt="${ex.name}" onerror="this.style.display='none'">
+      <img class="info-panel-image" src="${ex.image}" alt="${ex.name}" onerror="this.style.display='none'">
       <div class="info-panel-tip">${ex.tip}</div>
       ${ex.isFinisher ? `<div style="font-size:12px;color:var(--amber);margin-bottom:12px;">🔥 ${ex.finisherProgression}</div>` : ''}
       <button class="info-panel-video-btn" onclick="window.open('${ex.video}', '_blank')">
