@@ -2,7 +2,7 @@
   "name": "FORGE — Power Hypertrophy System",
   "short_name": "FORGE",
   "description": "PH-PPL Workout Planner & Tracker",
-  "start_url": "/index.html",
+  "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#0D0D0D",
   "theme_color": "#F59E0B",
