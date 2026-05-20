@@ -1150,7 +1150,8 @@
     setBWMode,
     saveSettings,
     exportData,
-    clearData
+    clearData,
+    clearToday
   };
 
   // ===== BOOT =====
