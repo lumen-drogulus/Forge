@@ -1193,7 +1193,8 @@
     saveSettings,
     exportData,
     clearData,
-    clearToday
+    clearToday,
+    toggleWorkoutDetail
   };
 
   // ===== BOOT =====
