@@ -1034,6 +1034,11 @@
           </button>
         </div>
         <div>
+        <button class="action-btn" onclick="FORGE.clearToday()" style="width:100%;justify-content:center;color:var(--amber);">
+            <i class="ti ti-rotate-2"></i> Clear today's workout
+          </button>
+        </div>
+        <div>
           <button class="action-btn" onclick="FORGE.clearData()" style="width:100%;justify-content:center;color:var(--red);">
             <i class="ti ti-trash"></i> Clear all data
           </button>
