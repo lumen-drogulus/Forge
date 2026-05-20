@@ -311,7 +311,7 @@ const FORGE_DATA = {
           rest: 60,
           restLabel: "60 sec",
           weightMode: "bw",
-          image: "box-jumps.png",
+          image: "box-jump.png",
           video: "https://www.youtube.com/watch?v=NBY9-kTuHEk",
           tip: "Focus on explosive hip extension and soft landings. Step down between reps rather than rebounding. Progress the height over weeks, not the reps. This is power output, not conditioning.",
           isFinisher: true,
