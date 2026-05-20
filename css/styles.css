@@ -949,3 +949,59 @@ html, body {
 .mb-8 { margin-bottom: 8px; }
 .mb-16 { margin-bottom: 16px; }
 .mt-16 { margin-top: 16px; }
+
+/* ===== WORKOUT HISTORY DETAIL ===== */
+.workout-detail {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+  background: var(--bg-surface);
+  border-radius: 0 0 6px 6px;
+}
+.workout-detail.open {
+  max-height: 800px;
+}
+.detail-exercise {
+  padding: 10px 12px;
+  border-bottom: 0.5px solid var(--bg-card);
+}
+.detail-exercise:last-child { border-bottom: none; }
+.detail-exercise-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.detail-exercise-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.detail-e1rm {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+}
+.detail-sets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.detail-set {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-card);
+  border-radius: 4px;
+  padding: 4px 8px;
+}
+.detail-set-num {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+.detail-set-data {
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
