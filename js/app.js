@@ -960,17 +960,51 @@
     if (recent.length === 0) return '<div class="empty-state"><div class="empty-state-icon">📊</div><div class="empty-state-text">Complete a workout to see history here.</div></div>';
 
     let html = '<div class="section-header">Recent workouts</div>';
-    recent.forEach(log => {
+    recent.forEach((log, idx) => {
       const date = new Date(log.completedAt).toLocaleDateString();
       const dayInfo = FORGE_DATA.cycleDays.find(d => d.id === log.dayId);
       const totalSets = log.exercises.reduce((s, e) => s + e.sets.length, 0);
+      const totalReps = log.exercises.reduce((s, e) =>
+        s + e.sets.reduce((r, set) => r + (set.reps || 0), 0), 0);
       const typeClass = dayInfo && dayInfo.type === 'hypertrophy' ? 'text-cyan' : 'text-amber';
-      html += `
-        <div class="wo-item" style="margin-bottom:4px;">
-          <div class="wo-item-info">
-            <div class="wo-item-name"><span class="${typeClass}">${dayInfo ? dayInfo.name : log.dayId}</span></div>
-            <div class="wo-item-detail">${date} · ${totalSets} sets</div>
+      const borderColor = dayInfo && dayInfo.type === 'hypertrophy' ? 'var(--cyan)' : 'var(--amber)';
+
+      let detail = '';
+      log.exercises.forEach(ex => {
+        if (ex.sets.length === 0) return;
+        const bestSet = ex.sets.reduce((best, s) => {
+          const e1 = FORGE_DATA.calculateE1RM(s.weight, s.reps || 0);
+          return e1 > best.e1rm ? { e1rm: e1, display: s.display } : best;
+        }, { e1rm: 0, display: '' });
+
+        detail += `
+          <div class="detail-exercise">
+            <div class="detail-exercise-header">
+              <span class="detail-exercise-name">${ex.name}</span>
+              ${bestSet.e1rm > 0 ? `<span class="detail-e1rm">e1RM ${bestSet.e1rm}</span>` : ''}
+            </div>
+            <div class="detail-sets">
+              ${ex.sets.map((set, si) => `
+                <div class="detail-set">
+                  <span class="detail-set-num">S${si + 1}</span>
+                  <span class="detail-set-data">${set.display}</span>
+                </div>
+              `).join('')}
+            </div>
           </div>
+        `;
+      });
+
+      html += `
+        <div class="workout-history-entry" style="margin-bottom:6px;">
+          <div class="wo-item" style="margin-bottom:0;border-left:2px solid ${borderColor};" onclick="FORGE.toggleWorkoutDetail(${idx})">
+            <div class="wo-item-info">
+              <div class="wo-item-name"><span class="${typeClass}">${dayInfo ? dayInfo.name : log.dayId}</span> <span class="text-muted" style="font-weight:400;font-size:12px;">${dayInfo ? dayInfo.label : ''}</span></div>
+              <div class="wo-item-detail">${date} · ${totalSets} sets · ${totalReps} reps</div>
+            </div>
+            <div class="wo-item-status"><i class="ti ti-chevron-down" id="workout-chevron-${idx}" style="transition:transform 0.2s;"></i></div>
+          </div>
+          <div class="workout-detail" id="workout-detail-${idx}">${detail}</div>
         </div>
       `;
     });
