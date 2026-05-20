@@ -731,7 +731,6 @@
       });
       fetch(state.sheetsUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rows }),
         mode: 'no-cors'
       }).catch(() => {});
