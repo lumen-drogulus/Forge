@@ -14,7 +14,6 @@
     currentSetIndex: 0,
     editingSetIndex: null,
     skippedExercises: [],
-    skippedExercises: [],
     activeWorkoutLog: null,
     timerInterval: null,
     timerRemaining: 0,
@@ -446,7 +445,7 @@
           ${state.currentExerciseIndex < totalExercises - 1 ? 'NEXT EXERCISE' : 'FINISH LAST EXERCISE'}
         </button>
       ` : `
-        <div class="set-label">Set ${currentSet + 1} of ${numSets}</div>
+        <div class="set-label">${state.editingSetIndex !== null ? `Editing set ${state.editingSetIndex + 1}` : `Set ${currentSet + 1} of ${numSets}`}</div>
 
         ${hasBWModes ? `
           <div class="bw-toggle" id="bw-toggle">
@@ -617,6 +616,7 @@
     const log = state.activeWorkoutLog.exercises[state.currentExerciseIndex];
     log.completed = true;
     stopTimer();
+    state.editingSetIndex = null;
 
     // Move to next incomplete exercise or back to overview
     const nextIndex = findNextExercise();
@@ -684,6 +684,7 @@
 
   function backToOverview() {
     stopTimer();
+    state.editingSetIndex = null;
     state.workoutPhase = 'overview';
     renderWorkoutView();
   }
