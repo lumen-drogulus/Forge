@@ -439,11 +439,10 @@
 
       <div class="set-indicators">${setIndicators}</div>
 
-      ${allSetsDone ? `
-        <button class="save-set-btn ${typeClass}" onclick="${state.editingSetIndex !== null ? 'FORGE.updateSet()' : 'FORGE.saveSet()'}">
-          ${state.editingSetIndex !== null ? 'UPDATE SET' : 'SAVE SET'}
+      ${allSetsDone && state.editingSetIndex === null ? `
+        <button class="save-set-btn ${typeClass}" onclick="FORGE.finishExercise()">
+          ${state.currentExerciseIndex < totalExercises - 1 ? 'NEXT EXERCISE' : 'FINISH LAST EXERCISE'}
         </button>
-        ${state.editingSetIndex !== null ? `<button class="skip-btn" style="width:100%;margin-top:8px;padding:8px;" onclick="FORGE.cancelEdit()">Cancel edit</button>` : ''}
       ` : `
         <div class="set-label">Set ${currentSet + 1} of ${numSets}</div>
 
@@ -490,9 +489,10 @@
           </div>
         </div>
 
-        <button class="save-set-btn ${typeClass}" onclick="FORGE.saveSet()">
-          SAVE SET
+        <button class="save-set-btn ${typeClass}" onclick="${state.editingSetIndex !== null ? 'FORGE.updateSet()' : 'FORGE.saveSet()'}">
+          ${state.editingSetIndex !== null ? 'UPDATE SET' : 'SAVE SET'}
         </button>
+        ${state.editingSetIndex !== null ? `<button class="skip-btn" style="width:100%;margin-top:8px;padding:8px;" onclick="FORGE.cancelEdit()">Cancel edit</button>` : ''}
       `}
     `;
   }
