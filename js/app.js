@@ -12,6 +12,7 @@
     workoutPhase: 'overview', // overview | warmup | exercise | complete
     currentExerciseIndex: 0,
     currentSetIndex: 0,
+    editingSetIndex: null,
     skippedExercises: [],
     activeWorkoutLog: null,
     timerInterval: null,
@@ -371,7 +372,7 @@
       else cls += ' upcoming';
 
       setIndicators += `
-        <div class="${cls}">
+        <div class="${cls}" ${loggedSet ? `onclick="FORGE.editSet(${s})" style="cursor:pointer;"` : ''}>
           <div class="si-label">${loggedSet ? `Set ${s+1} ✓` : s === currentSet ? `Set ${s+1} · now` : `Set ${s+1}`}</div>
           <div class="si-data">${loggedSet ? `${loggedSet.display}` : '—'}</div>
         </div>
@@ -383,10 +384,12 @@
     const isBWPlus = ex.weightMode === 'bw-plus';
     const isBWMinus = ex.weightMode === 'bw-minus';
     const hasBWModes = isBW || isBWPlus || isBWMinus;
-    const lastWeight = log.sets.length > 0 ? log.sets[log.sets.length - 1].weight : (prevData ? prevData.weight : '');
+    const editingSet = state.editingSetIndex !== null ? log.sets[state.editingSetIndex] : null;
+    const lastWeight = editingSet ? editingSet.weight : (log.sets.length > 0 ? log.sets[log.sets.length - 1].weight : (prevData ? prevData.weight : ''));
 
     // Build rep options
-    const repOptions = buildRepOptions(ex.reps);
+    const editReps = editingSet ? (editingSet.repsDisplay || editingSet.reps) : undefined;
+    const repOptions = buildRepOptions(ex.reps, editReps);
 
     const allSetsDone = currentSet >= numSets;
 
@@ -437,9 +440,10 @@
       <div class="set-indicators">${setIndicators}</div>
 
       ${allSetsDone ? `
-        <button class="save-set-btn ${typeClass}" onclick="FORGE.finishExercise()">
-          ${state.currentExerciseIndex < totalExercises - 1 ? 'NEXT EXERCISE' : 'FINISH LAST EXERCISE'}
+        <button class="save-set-btn ${typeClass}" onclick="${state.editingSetIndex !== null ? 'FORGE.updateSet()' : 'FORGE.saveSet()'}">
+          ${state.editingSetIndex !== null ? 'UPDATE SET' : 'SAVE SET'}
         </button>
+        ${state.editingSetIndex !== null ? `<button class="skip-btn" style="width:100%;margin-top:8px;padding:8px;" onclick="FORGE.cancelEdit()">Cancel edit</button>` : ''}
       ` : `
         <div class="set-label">Set ${currentSet + 1} of ${numSets}</div>
 
@@ -549,6 +553,64 @@
     persistWorkoutState();
   }
 
+  function editSet(setIndex) {
+    const log = state.activeWorkoutLog.exercises[state.currentExerciseIndex];
+    if (!log.sets[setIndex]) return;
+    state.editingSetIndex = setIndex;
+    renderExercise(document.getElementById('main-content'));
+  }
+
+  function updateSet() {
+    const day = FORGE_DATA.cycleDays[state.cycleIndex];
+    const workout = FORGE_DATA.workouts[day.id];
+    const ex = workout.exercises[state.currentExerciseIndex];
+    const log = state.activeWorkoutLog.exercises[state.currentExerciseIndex];
+    const idx = state.editingSetIndex;
+    const isBW = ex.weightMode === 'bw';
+
+    let weight, reps, display;
+
+    if (isBW) {
+      weight = state.bodyWeight;
+      reps = document.getElementById('reps-input').value;
+      display = `BW × ${reps}`;
+    } else {
+      weight = parseFloat(document.getElementById('weight-input').value) || 0;
+      reps = document.getElementById('reps-input').value;
+      if (ex.weightMode === 'bw-plus') {
+        display = `BW+${weight} × ${reps}`;
+        weight = state.bodyWeight + weight;
+      } else if (ex.weightMode === 'bw-minus') {
+        display = `BW-${weight} × ${reps}`;
+        weight = Math.max(0, state.bodyWeight - weight);
+      } else {
+        display = `${weight} × ${reps}`;
+      }
+    }
+
+    const repsNum = reps === 'F' ? 0 : parseInt(reps) || 0;
+
+    log.sets[idx] = {
+      weight: weight,
+      reps: repsNum,
+      repsDisplay: reps,
+      display: display,
+      timestamp: Date.now()
+    };
+
+    if (repsNum > 0 && weight > 0) {
+      checkAndUpdatePR(ex.id, ex.name, weight, repsNum);
+    }
+
+    state.editingSetIndex = null;
+    renderExercise(document.getElementById('main-content'));
+  }
+
+  function cancelEdit() {
+    state.editingSetIndex = null;
+    renderExercise(document.getElementById('main-content'));
+  }
+  
   function finishExercise() {
     const log = state.activeWorkoutLog.exercises[state.currentExerciseIndex];
     log.completed = true;
@@ -881,10 +943,10 @@
     renderExercise(document.getElementById('main-content'));
   }
 
-  function buildRepOptions(repsStr) {
+  function buildRepOptions(repsStr, selectedValue) {
     if (repsStr === 'to failure' || repsStr === 'max time' || repsStr === 'max each leg') {
-      let opts = '<option value="F">Failure</option>';
-      for (let i = 1; i <= 50; i++) opts += `<option value="${i}">${i}</option>`;
+      let opts = `<option value="F" ${selectedValue === 'F' || selectedValue === 0 ? 'selected' : ''}>Failure</option>`;
+      for (let i = 1; i <= 50; i++) opts += `<option value="${i}" ${i == selectedValue ? 'selected' : ''}>${i}</option>`;
       return opts;
     }
     const match = repsStr.match(/(\d+)-?(\d+)?/);
@@ -893,7 +955,7 @@
     const high = match[2] ? parseInt(match[2]) : low;
     let opts = '';
     for (let i = Math.max(1, low - 3); i <= high + 5; i++) {
-      opts += `<option value="${i}" ${i === low ? 'selected' : ''}>${i}</option>`;
+     opts += `<option value="${i}" ${selectedValue !== undefined ? (i == selectedValue ? 'selected' : '') : (i === low ? 'selected' : '')}>${i}</option>`;
     }
     opts += '<option value="F">Failure</option>';
     return opts;
@@ -1187,6 +1249,9 @@
     backToOverview,
     skipExercise,
     saveSet,
+    editSet,
+    updateSet,
+    cancelEdit,
     finishExercise,
     completeWorkout,
     endWorkout,
