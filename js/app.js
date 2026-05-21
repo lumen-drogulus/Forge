@@ -1146,6 +1146,12 @@
           </button>
         </div>
         <div>
+          <input type="file" id="import-file" accept=".json" style="display:none;" onchange="FORGE.importData(this)">
+          <button class="action-btn" onclick="document.getElementById('import-file').click()" style="width:100%;justify-content:center;">
+            <i class="ti ti-upload"></i> Import data from JSON
+          </button>
+        </div>
+        <div>
         <button class="action-btn" onclick="FORGE.clearToday()" style="width:100%;justify-content:center;color:var(--amber);">
             <i class="ti ti-rotate-2"></i> Clear today's workout
           </button>
@@ -1197,6 +1203,56 @@
     URL.revokeObjectURL(url);
   }
 
+  function importData(input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        const data = JSON.parse(e.target.result);
+
+        // Validate structure
+        const validKeys = ['logs', 'prs', 'settings', 'completedDays'];
+        const found = validKeys.filter(k => data[k] !== undefined);
+        if (found.length === 0) {
+          alert('Invalid backup file. No recognized data found.');
+          input.value = '';
+          return;
+        }
+
+        const parts = [];
+        if (data.logs) parts.push('workout logs');
+        if (data.prs) parts.push('PRs');
+        if (data.settings) parts.push('settings');
+        if (data.completedDays) parts.push('calendar history');
+
+        if (!confirm(`This will replace your current: ${parts.join(', ')}.\n\nContinue?`)) {
+          input.value = '';
+          return;
+        }
+
+        if (data.logs) Store.saveLogs(data.logs);
+        if (data.prs) Store.savePRs(data.prs);
+        if (data.completedDays) Store.set('completedDays', data.completedDays);
+        if (data.settings) {
+          Store.saveSettings(data.settings);
+          state.cycleIndex = data.settings.cycleIndex || 0;
+          state.bodyWeight = data.settings.bodyWeight || 180;
+          state.weightUnit = data.settings.weightUnit || 'lbs';
+          state.sheetsUrl = data.settings.sheetsUrl || '';
+        }
+
+        alert('Data imported successfully.');
+        renderTab('home');
+      } catch (err) {
+        alert('Could not read file. Make sure it is a valid FORGE backup JSON.');
+      }
+      input.value = '';
+    };
+    reader.readAsText(file);
+  }
+  
   function clearToday() {
     const today = new Date().toISOString().split('T')[0];
     const completed = Store.getCompletedDays();
@@ -1269,7 +1325,8 @@
     exportData,
     clearData,
     clearToday,
-    toggleWorkoutDetail
+    toggleWorkoutDetail,
+    importData
   };
 
   // ===== BOOT =====
