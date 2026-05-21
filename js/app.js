@@ -14,6 +14,7 @@
     currentSetIndex: 0,
     editingSetIndex: null,
     skippedExercises: [],
+    skippedExercises: [],
     activeWorkoutLog: null,
     timerInterval: null,
     timerRemaining: 0,
@@ -371,9 +372,10 @@
       else if (s === currentSet) cls += ` current ${typeClass}`;
       else cls += ' upcoming';
 
+      const isEditing = state.editingSetIndex === s;
       setIndicators += `
-        <div class="${cls}" ${loggedSet ? `onclick="FORGE.editSet(${s})" style="cursor:pointer;"` : ''}>
-          <div class="si-label">${loggedSet ? `Set ${s+1} ✓` : s === currentSet ? `Set ${s+1} · now` : `Set ${s+1}`}</div>
+        <div class="${cls}${isEditing ? ' editing' : ''}" ${loggedSet ? `onclick="FORGE.editSet(${s})" style="cursor:pointer;"` : ''}>
+          <div class="si-label">${loggedSet ? (isEditing ? `Set ${s+1} ✎` : `Set ${s+1} ✓`) : s === currentSet ? `Set ${s+1} · now` : `Set ${s+1}`}</div>
           <div class="si-data">${loggedSet ? `${loggedSet.display}` : '—'}</div>
         </div>
       `;
