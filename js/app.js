@@ -604,6 +604,7 @@ Store.saveActiveWorkout({
               </div>
             `}
           </div>
+        </div>
 
         <div class="rest-timer ${state.timerRunning ? 'active' : ''} ${typeClass}" id="rest-timer">
           <div class="rest-timer-left">
