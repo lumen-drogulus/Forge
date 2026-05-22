@@ -853,7 +853,7 @@
       ffetch(state.sheetsUrl, {
         method: 'POST',
         body: JSON.stringify({ rows })
-      }).catch(() => {});
+      }).catch(e => console.error('Sheets sync failed:', e));
     } catch(e) {}
   }
 
