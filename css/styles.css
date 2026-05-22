@@ -225,6 +225,27 @@ html, body {
   color: var(--text-muted);
   background: rgba(55, 65, 81, 0.2);
 }
+.cal-day.workout-done {
+  background: transparent;
+  position: relative;
+}
+.cal-day.workout-done .cal-num {
+  color: var(--text-muted);
+  font-size: 10px;
+  opacity: 0.5;
+}
+.cal-day.workout-done .cal-x {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+}
+.cal-day.done-pwr .cal-x { color: var(--amber); }
+.cal-day.done-hyp .cal-x { color: var(--cyan); }
 .cal-day.missed {
   color: var(--border);
 }
