@@ -938,6 +938,40 @@ html, body {
 .empty-state-icon { font-size: 36px; margin-bottom: 12px; }
 .empty-state-text { font-size: 14px; }
 
+/* ===== UP NEXT PREVIEW ===== */
+.up-next-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg-surface);
+  border-radius: 6px;
+  margin-bottom: 12px;
+  border-left: 2px solid var(--border);
+}
+.up-next-label {
+  color: var(--text-muted);
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+.up-next-name {
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.up-next-detail {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
 /* ===== UTILITIES ===== */
 .hidden { display: none !important; }
 .text-amber { color: var(--amber); }
