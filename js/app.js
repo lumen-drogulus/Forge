@@ -1058,13 +1058,9 @@
       <div class="tracker-link-card">
         <h2>FORGE Tracker</h2>
         <p>Your detailed workout history, trends, charts, and analytics live in Google Sheets for deep review.</p>
-        ${Store.getSettings().sheetsViewUrl ? `
-          <button class="tracker-open-btn" onclick="window.open('${Store.getSettings().sheetsViewUrl}', '_blank')">
-            <i class="ti ti-external-link"></i> Open tracker
-          </button>
-        ` : `
-          <p style="color:var(--text-muted);font-size:12px;">Add your Google Sheets view URL in Settings to enable the tracker link.</p>
-        `}
+        <button class="tracker-open-btn" onclick="window.open('${FORGE_DATA.sheetsViewUrl}', '_blank')">
+          <i class="ti ti-external-link"></i> Open tracker
+        </button>
       </div>
       ${renderRecentWorkouts()}
     `;
