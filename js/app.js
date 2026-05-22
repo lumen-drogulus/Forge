@@ -490,6 +490,18 @@
           </div>
         </div>
 
+        ${(() => {
+          const nextIdx = state.currentExerciseIndex + 1;
+          const nextEx = nextIdx < workout.exercises.length ? workout.exercises[nextIdx] : null;
+          return nextEx && state.editingSetIndex === null ? `
+            <div class="up-next-preview">
+              <span class="up-next-label">Up next</span>
+              <span class="up-next-name">${nextEx.name}${nextEx.isFinisher ? ' 🔥' : ''}</span>
+              <span class="up-next-detail">${nextEx.sets}×${nextEx.reps} · ${nextEx.restLabel}</span>
+            </div>
+          ` : '';
+        })()}
+
         <button class="save-set-btn ${typeClass}" onclick="${state.editingSetIndex !== null ? 'FORGE.updateSet()' : 'FORGE.saveSet()'}">
           ${state.editingSetIndex !== null ? 'UPDATE SET' : 'SAVE SET'}
         </button>
