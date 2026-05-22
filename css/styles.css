@@ -868,21 +868,11 @@ html, body {
 }
 .splash.hidden { opacity: 0; pointer-events: none; }
 .splash-logo {
-  width: 120px;
-  height: 120px;
-  margin-bottom: 16px;
-}
-.splash-name {
-  font-family: var(--font-display);
-  font-size: 36px;
-  letter-spacing: 6px;
-  color: var(--text-primary);
-}
-.splash-sub {
-  font-size: 11px;
-  color: var(--amber);
-  letter-spacing: 3px;
-  margin-top: 4px;
+  width: 100%;
+  max-width: 480px;
+  height: auto;
+  padding: 0 16px;
+  object-fit: contain;
 }
 
 /* ===== TRACKER TAB (link to sheet) ===== */
@@ -1061,27 +1051,6 @@ html, body {
   color: var(--text-primary);
 }
 
-/* ===== FORGE SPARK EFFECT ===== */
-.forge-spark {
-  position: fixed;
-  border-radius: 50%;
-  background: var(--amber);
-  box-shadow: 0 0 6px var(--amber), 0 0 12px rgba(245, 158, 11, 0.5);
-  z-index: 300;
-  pointer-events: none;
-  animation: spark-fly 0.6s ease-out forwards;
-}
-@keyframes spark-fly {
-  0% {
-    transform: translate(0, 0) scale(1);
-    opacity: 1;
-  }
-  100% {
-    transform: translate(var(--dx), var(--dy)) scale(0);
-    opacity: 0;
-  }
-}
-
 /* ===== FORGE FLASH ===== */
 .forge-flash {
   position: absolute;
@@ -1138,8 +1107,10 @@ html, body {
   background: rgba(0, 0, 0, 0.85);
 }
 .pr-overlay-img {
-  width: 220px;
-  height: 220px;
+  width: 100%;
+  max-width: 480px;
+  height: auto;
+  padding: 0 16px;
   object-fit: contain;
   transform: scale(0.5);
   opacity: 0;
