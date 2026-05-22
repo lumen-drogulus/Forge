@@ -1187,14 +1187,6 @@
           <label style="font-size:13px;color:var(--text-secondary);display:block;margin-bottom:4px;">Current cycle day (1-8)</label>
           <input type="number" class="weight-input" id="settings-cycle" value="${state.cycleIndex + 1}" min="1" max="8" inputmode="numeric" style="width:100%;">
         </div>
-        <div class="warmup-card">
-          <label style="font-size:13px;color:var(--text-secondary);display:block;margin-bottom:4px;">Google Sheets webhook URL</label>
-          <input type="url" class="weight-input" id="settings-sheets" value="${settings.sheetsUrl || ''}" placeholder="https://script.google.com/..." style="width:100%;font-size:13px;">
-        </div>
-        <div class="warmup-card">
-          <label style="font-size:13px;color:var(--text-secondary);display:block;margin-bottom:4px;">Google Sheets view URL</label>
-          <input type="url" class="weight-input" id="settings-sheets-view" value="${settings.sheetsViewUrl || ''}" placeholder="https://docs.google.com/spreadsheets/d/..." style="width:100%;font-size:13px;">
-        </div>
         <button class="start-btn power" onclick="FORGE.saveSettings()">SAVE SETTINGS</button>
         <div style="margin-top:16px;">
           <button class="action-btn" onclick="FORGE.exportData()" style="width:100%;justify-content:center;">
@@ -1224,19 +1216,13 @@
   function saveSettings() {
     const bw = parseFloat(document.getElementById('settings-bw').value) || 180;
     const cycle = parseInt(document.getElementById('settings-cycle').value) || 1;
-    const sheets = document.getElementById('settings-sheets').value || '';
-    const sheetsView = document.getElementById('settings-sheets-view').value || '';
-    
     state.bodyWeight = bw;
     state.cycleIndex = Math.max(0, Math.min(7, cycle - 1));
-    state.sheetsUrl = sheets;
 
     Store.saveSettings({
       bodyWeight: bw,
       cycleIndex: state.cycleIndex,
-      weightUnit: state.weightUnit,
-      sheetsUrl: sheets,
-      sheetsViewUrl: sheetsView
+      weightUnit: state.weightUnit
     });
 
     alert('Settings saved.');
