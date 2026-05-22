@@ -20,7 +20,9 @@
     timerRunning: false,
     bodyWeight: 180,         // default, configurable in settings
     sheetsUrl: '',           // Google Sheets webhook URL
-    weightUnit: 'lbs'
+    weightUnit: 'lbs',
+    calendarMonth: new Date().getMonth(),
+    calendarYear: new Date().getFullYear()
   };
 
   // ===== STORAGE =====
@@ -152,6 +154,9 @@
 
   // ===== HOME SCREEN =====
   function renderHome(el) {
+    const today = new Date();
+    state.calendarMonth = today.getMonth();
+    state.calendarYear = today.getFullYear();
     const day = FORGE_DATA.cycleDays[state.cycleIndex];
     const workout = FORGE_DATA.workouts[day.id];
     const isRest = day.type === 'rest';
@@ -195,49 +200,83 @@
 
   function renderCalendar() {
     const today = new Date();
-    const year = today.getFullYear();
-    const month = today.getMonth();
-    const monthName = today.toLocaleString('default', { month: 'long', year: 'numeric' });
+    const year = state.calendarYear;
+    const month = state.calendarMonth;
+    const monthName = new Date(year, month).toLocaleString('default', { month: 'long', year: 'numeric' });
     const firstDay = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const isCurrentMonth = (year === today.getFullYear() && month === today.getMonth());
     const todayDate = today.getDate();
     const completedDays = Store.getCompletedDays();
+
+    const earliestDate = completedDays.length > 0
+      ? completedDays.reduce((min, c) => c.date < min ? c.date : min, completedDays[0].date)
+      : null;
 
     let grid = '<div class="calendar-grid">';
     ['S','M','T','W','T','F','S'].forEach(d => { grid += `<div class="cal-day-header">${d}</div>`; });
     for (let i = 0; i < firstDay; i++) grid += '<div class="cal-day empty"></div>';
+
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
       const completed = completedDays.find(c => c.date === dateStr);
+      const thisDate = new Date(year, month, d);
+      const isToday = isCurrentMonth && d === todayDate;
+      const isPast = thisDate < new Date(today.getFullYear(), today.getMonth(), todayDate);
+      const isTracked = earliestDate && dateStr >= earliestDate;
+
       let cls = 'cal-day';
-      if (d === todayDate) {
+      let content = `${d}`;
+
+      if (isToday) {
         const dayType = FORGE_DATA.cycleDays[state.cycleIndex].type;
         cls += ` today ${dayType === 'hypertrophy' ? 'hypertrophy-type' : dayType === 'rest' ? 'rest-type' : 'power-type'}`;
-      } else if (completed) {
-        cls += ` ${completed.type === 'hypertrophy' ? 'hypertrophy-done' : completed.type === 'rest' ? 'rest-done' : 'power-done'}`;
-      } else if (d > todayDate) {
-        const daysAhead = d - todayDate;
-        const futureIdx = (state.cycleIndex + daysAhead) % 8;
+      } else if (completed && completed.type !== 'rest') {
+        cls += ' workout-done';
+        content = `<span class="cal-num">${d}</span><span class="cal-x">×</span>`;
+      } else if (completed && completed.type === 'rest') {
+        cls += ' rest-done';
+      } else if (isPast && isTracked) {
+        cls += ' missed';
+      } else if (!isPast && !isToday) {
+        const daysAhead = Math.round((thisDate - today) / (1000 * 60 * 60 * 24));
+        const futureIdx = ((state.cycleIndex + daysAhead) % 8 + 8) % 8;
         const futureType = FORGE_DATA.cycleDays[futureIdx].type;
         cls += ` future-planned ${futureType === 'hypertrophy' ? 'hypertrophy-type' : futureType === 'rest' ? 'rest-type' : 'power-type'}`;
       }
-      grid += `<div class="${cls}">${d}</div>`;
+
+      grid += `<div class="${cls}">${content}</div>`;
     }
     grid += '</div>';
 
     return `
       <div class="calendar-section">
         <div class="calendar-header">
+          <button class="calendar-nav-btn" onclick="FORGE.calendarPrev()"><i class="ti ti-chevron-left"></i></button>
           <div class="calendar-month">${monthName}</div>
+          <button class="calendar-nav-btn" onclick="FORGE.calendarNext()"><i class="ti ti-chevron-right"></i></button>
         </div>
         ${grid}
         <div class="calendar-legend">
+          <div><span class="legend-dot" style="background:var(--green)"></span>Done</div>
           <div><span class="legend-dot" style="background:var(--amber)"></span>Power</div>
           <div><span class="legend-dot" style="background:var(--cyan)"></span>Hypertrophy</div>
           <div><span class="legend-dot" style="background:var(--gray)"></span>Rest</div>
         </div>
       </div>
     `;
+  }
+
+  function calendarPrev() {
+    state.calendarMonth--;
+    if (state.calendarMonth < 0) { state.calendarMonth = 11; state.calendarYear--; }
+    renderHome(document.getElementById('main-content'));
+  }
+
+  function calendarNext() {
+    state.calendarMonth++;
+    if (state.calendarMonth > 11) { state.calendarMonth = 0; state.calendarYear++; }
+    renderHome(document.getElementById('main-content'));
   }
 
   // ===== WORKOUT FLOW =====
@@ -1316,6 +1355,8 @@
   window.FORGE = {
     startWorkout,
     skipRestDay,
+    calendarPrev,
+    calendarNext,
     goToWarmup,
     goToExercise,
     warmupDone,
