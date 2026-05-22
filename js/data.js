@@ -220,6 +220,7 @@ const FORGE_DATA = {
           image: "dead-hang.png",
           video: "https://www.youtube.com/watch?v=wPmGMqaKhJo",
           tip: "Full grip, shoulders engaged (not shrugging up to the ears). Track your times. When consistently over 60 seconds, start adding scapular pulls from the hang for sets of 8-10.",
+          trackMode: "time",
           isFinisher: true,
           finisherProgression: "Building toward advanced pull-up variations. Dead hangs develop grip endurance and scapular stability."
         }
