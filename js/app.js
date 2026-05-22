@@ -23,7 +23,11 @@
     weightUnit: 'lbs',
     workoutStartTime: null,
     calendarMonth: new Date().getMonth(),
-    calendarYear: new Date().getFullYear()
+    calendarYear: new Date().getFullYear(),
+    stopwatchRunning: false,
+    stopwatchStart: 0,
+    stopwatchInterval: null,
+    stopwatchElapsed: 0
   };
 
   // ===== STORAGE =====
@@ -143,10 +147,23 @@ Store.saveActiveWorkout({
   }
 
   function hideSplash() {
+    // Phase 1: sparks + anvil + flash on the logo after brief delay
+    setTimeout(() => {
+      const logo = document.getElementById('splash-logo');
+      const flash = document.getElementById('splash-flash');
+      if (logo) fireForgeEffect(logo);
+      triggerFlash(flash);
+      playAnvilStrike();
+    }, 800);
+
+    // Phase 2: fade out splash
     setTimeout(() => {
       const splash = document.getElementById('splash');
-      if (splash) { splash.classList.add('hidden'); setTimeout(() => splash.remove(), 600); }
-    }, 1500);
+      if (splash) {
+        splash.classList.add('hidden');
+        setTimeout(() => splash.remove(), 600);
+      }
+    }, 2200);
   }
 
   function registerSW() {
@@ -497,6 +514,25 @@ Store.saveActiveWorkout({
       </div>
 
       <div class="stats-row">
+        ${isTimeMode ? `
+        <div class="stat-card">
+          <div class="stat-label">Last time</div>
+          <div class="stat-value font-mono">${(() => { const td = getTimePreviousData(ex.id, day.id); return td ? td.display : '—'; })()}</div>
+          <div class="stat-detail">${(() => { const td = getTimePreviousData(ex.id, day.id); return td ? td.detail : 'No data'; })()}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Best time</div>
+          <div class="stat-value pr font-mono">${(() => { const tp = getTimePR(ex.id); return tp ? tp.display : '—'; })()}</div>
+          <div class="stat-detail">${(() => { const tp = getTimePR(ex.id); return tp ? tp.detail : 'No data'; })()}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Trend</div>
+          <div class="stat-value ${(() => { const tt = getTimeTrend(ex.id, day.id); return tt ? (tt.direction === 'up' ? 'trend-up' : tt.direction === 'down' ? 'trend-down' : '') : ''; })()} font-mono">
+            ${(() => { const tt = getTimeTrend(ex.id, day.id); return tt ? `${tt.direction === 'up' ? '↑' : tt.direction === 'down' ? '↓' : '→'} ${tt.percent}` : '—'; })()}
+          </div>
+          <div class="stat-detail">${(() => { const tt = getTimeTrend(ex.id, day.id); return tt ? tt.detail : 'Need 3+ sessions'; })()}</div>
+        </div>
+        ` : `
         <div class="stat-card">
           <div class="stat-label">Last time</div>
           <div class="stat-value font-mono">${prevData ? prevData.weight + ' ' + state.weightUnit : '—'}</div>
@@ -514,6 +550,7 @@ Store.saveActiveWorkout({
           </div>
           <div class="stat-detail">${trendData ? trendData.detail : 'Need 3+ sessions'}</div>
         </div>
+        `}
       </div>
 
       <div class="set-indicators">${setIndicators}</div>
@@ -550,7 +587,11 @@ Store.saveActiveWorkout({
           <div class="input-group">
             <label>${isTimeMode ? 'Seconds' : 'Reps'}</label>
             ${isTimeMode ? `
-              <div class="weight-input-wrap">
+              <div class="stopwatch-widget ${state.stopwatchRunning ? 'running' : ''} ${typeClass}" onclick="FORGE.toggleStopwatch()" id="stopwatch-widget">
+                <i class="ti ti-${state.stopwatchRunning ? 'player-stop' : 'player-play'} stopwatch-icon"></i>
+                <span class="stopwatch-time" id="stopwatch-display">${state.stopwatchRunning ? formatTime(state.stopwatchElapsed) : 'Tap to time'}</span>
+              </div>
+              <div class="weight-input-wrap" style="margin-top:6px;">
                 <button class="weight-adj" onclick="FORGE.adjSeconds(-5)">-5</button>
                 <input type="number" class="weight-input ${typeClass}" id="seconds-input" value="${lastSeconds}" inputmode="numeric" placeholder="0">
                 <button class="weight-adj" onclick="FORGE.adjSeconds(5)">+5</button>
@@ -641,15 +682,23 @@ Store.saveActiveWorkout({
 
     state.currentSetIndex++;
     stopTimer();
+    stopStopwatch();
 
     // Auto-start rest timer after saving a set (if not the last set)
     if (state.currentSetIndex < ex.sets) {
       startTimer(ex.rest);
     }
 
-    // Check for PR (skip for time-based exercises — seconds aren't comparable to e1RM)
-    if (repsNum > 0 && weight > 0 && ex.trackMode !== 'time') {
-      checkAndUpdatePR(ex.id, ex.name, weight, repsNum);
+    // Check for PR
+    if (ex.trackMode === 'time') {
+      const seconds = parseInt(reps) || 0;
+      if (seconds > 0) {
+        const isPR = checkAndUpdateTimePR(ex.id, ex.name, seconds);
+        if (isPR) showPRCelebration();
+      }
+    } else if (repsNum > 0 && weight > 0) {
+      const isPR = checkAndUpdatePR(ex.id, ex.name, weight, repsNum);
+      if (isPR) showPRCelebration();
     }
 
     renderExercise(document.getElementById('main-content'));
@@ -706,8 +755,15 @@ Store.saveActiveWorkout({
       timestamp: Date.now()
     };
 
-    if (repsNum > 0 && weight > 0 && ex.trackMode !== 'time') {
-      checkAndUpdatePR(ex.id, ex.name, weight, repsNum);
+    if (ex.trackMode === 'time') {
+      const seconds = parseInt(reps) || 0;
+      if (seconds > 0) {
+        const isPR = checkAndUpdateTimePR(ex.id, ex.name, seconds);
+        if (isPR) showPRCelebration();
+      }
+    } else if (repsNum > 0 && weight > 0) {
+      const isPR = checkAndUpdatePR(ex.id, ex.name, weight, repsNum);
+      if (isPR) showPRCelebration();
     }
 
     state.editingSetIndex = null;
@@ -791,6 +847,7 @@ Store.saveActiveWorkout({
 
   function backToOverview() {
     stopTimer();
+    stopStopwatch();
     state.editingSetIndex = null;
     state.workoutPhase = 'overview';
     renderWorkoutView();
@@ -846,6 +903,7 @@ Store.saveActiveWorkout({
     state.activeWorkoutLog = null;
     state.workoutStartTime = null;
     stopTimer();
+    stopStopwatch();
     persistWorkoutState();
   }
 
@@ -1001,6 +1059,67 @@ Store.saveActiveWorkout({
     };
   }
 
+  // ===== TIME-BASED EXERCISE HELPERS =====
+  function getTimePreviousData(exerciseId, dayId) {
+    const logs = Store.getLogs();
+    if (!logs[dayId] || logs[dayId].length === 0) return null;
+    const lastLog = logs[dayId][logs[dayId].length - 1];
+    const exLog = lastLog.exercises.find(e => e.id === exerciseId);
+    if (!exLog || exLog.sets.length === 0) return null;
+    const bestTime = Math.max(...exLog.sets.map(s => parseInt(s.reps) || 0));
+    return {
+      display: bestTime + 's',
+      detail: `${exLog.sets.length} sets`
+    };
+  }
+
+  function getTimePR(exerciseId) {
+    const prs = Store.getPRs();
+    if (!prs[exerciseId]) return null;
+    const pr = prs[exerciseId];
+    if (pr.bestTime) {
+      return { display: pr.bestTime + 's', detail: new Date(pr.date).toLocaleDateString() };
+    }
+    return null;
+  }
+
+  function getTimeTrend(exerciseId, dayId) {
+    const logs = Store.getLogs();
+    if (!logs[dayId] || logs[dayId].length < 3) return null;
+    const recent = logs[dayId].slice(-3);
+    const times = recent.map(log => {
+      const exLog = log.exercises.find(e => e.id === exerciseId);
+      if (!exLog || exLog.sets.length === 0) return 0;
+      return Math.max(...exLog.sets.map(s => parseInt(s.reps) || 0));
+    }).filter(v => v > 0);
+
+    if (times.length < 2) return null;
+    const first = times[0];
+    const last = times[times.length - 1];
+    const change = ((last - first) / first * 100);
+    return {
+      direction: change > 5 ? 'up' : change < -5 ? 'down' : 'flat',
+      percent: `${Math.abs(Math.round(change))}%`,
+      detail: `${times.length} sessions`
+    };
+  }
+
+  function checkAndUpdateTimePR(exerciseId, exerciseName, seconds) {
+    const prs = Store.getPRs();
+    if (!prs[exerciseId] || !prs[exerciseId].bestTime || seconds > prs[exerciseId].bestTime) {
+      prs[exerciseId] = {
+        name: exerciseName,
+        bestTime: seconds,
+        date: new Date().toISOString(),
+        isTime: true,
+        e1rm: 0, weight: 0, reps: 0
+      };
+      Store.savePRs(prs);
+      return true;
+    }
+    return false;
+  }
+
   // ===== REST TIMER =====
   function startTimer(duration) {
     stopTimer();
@@ -1078,6 +1197,51 @@ Store.saveActiveWorkout({
     input.value = Math.max(0, current + amount);
   }
 
+  // ===== STOPWATCH =====
+  function toggleStopwatch() {
+    if (state.stopwatchRunning) {
+      stopStopwatch();
+      // Fill the seconds input with elapsed time
+      const input = document.getElementById('seconds-input');
+      if (input) input.value = state.stopwatchElapsed;
+      renderExercise(document.getElementById('main-content'));
+    } else {
+      startStopwatch();
+    }
+  }
+
+  function startStopwatch() {
+    state.stopwatchRunning = true;
+    state.stopwatchStart = Date.now();
+    state.stopwatchElapsed = 0;
+    state.stopwatchInterval = setInterval(() => {
+      state.stopwatchElapsed = Math.round((Date.now() - state.stopwatchStart) / 1000);
+      const display = document.getElementById('stopwatch-display');
+      if (display) display.textContent = formatTime(state.stopwatchElapsed);
+      // Pulse the widget
+      const widget = document.getElementById('stopwatch-widget');
+      if (widget && !widget.classList.contains('running')) widget.classList.add('running');
+    }, 250);
+    // Update UI immediately
+    const display = document.getElementById('stopwatch-display');
+    if (display) display.textContent = '0:00';
+    const widget = document.getElementById('stopwatch-widget');
+    if (widget) widget.classList.add('running');
+    const icon = widget ? widget.querySelector('.stopwatch-icon') : null;
+    if (icon) { icon.classList.remove('ti-player-play'); icon.classList.add('ti-player-stop'); }
+  }
+
+  function stopStopwatch() {
+    if (state.stopwatchInterval) {
+      clearInterval(state.stopwatchInterval);
+      state.stopwatchInterval = null;
+    }
+    if (state.stopwatchRunning) {
+      state.stopwatchElapsed = Math.round((Date.now() - state.stopwatchStart) / 1000);
+    }
+    state.stopwatchRunning = false;
+  }
+
   function setBWMode(mode) {
     const day = FORGE_DATA.cycleDays[state.cycleIndex];
     const workout = FORGE_DATA.workouts[day.id];
@@ -1102,6 +1266,101 @@ Store.saveActiveWorkout({
     }
     opts += '<option value="F">Failure</option>';
     return opts;
+  }
+
+  // ===== FORGE EFFECT SYSTEM =====
+  function fireForgeEffect(targetElement) {
+    const rect = targetElement.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+
+    // Create sparks
+    const sparkCount = 14;
+    for (let i = 0; i < sparkCount; i++) {
+      const spark = document.createElement('div');
+      spark.className = 'forge-spark';
+      const angle = (i / sparkCount) * 360 + (Math.random() * 25 - 12);
+      const distance = 50 + Math.random() * 90;
+      const rad = angle * Math.PI / 180;
+      spark.style.left = cx + 'px';
+      spark.style.top = cy + 'px';
+      spark.style.setProperty('--dx', Math.cos(rad) * distance + 'px');
+      spark.style.setProperty('--dy', Math.sin(rad) * distance + 'px');
+      spark.style.animationDelay = (Math.random() * 0.15) + 's';
+      spark.style.width = (2 + Math.random() * 3) + 'px';
+      spark.style.height = spark.style.width;
+      document.body.appendChild(spark);
+      spark.addEventListener('animationend', () => spark.remove());
+    }
+  }
+
+  function playAnvilStrike() {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+
+      // Impact: short noise burst for the metallic hit
+      const bufSize = Math.floor(ctx.sampleRate * 0.04);
+      const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < bufSize; i++) {
+        d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufSize, 4);
+      }
+      const noise = ctx.createBufferSource();
+      noise.buffer = buf;
+      const nGain = ctx.createGain();
+      nGain.gain.value = 0.5;
+      noise.connect(nGain);
+      nGain.connect(ctx.destination);
+      noise.start();
+
+      // High metallic ring
+      const r1 = ctx.createOscillator();
+      const g1 = ctx.createGain();
+      r1.frequency.value = 2200;
+      r1.type = 'sine';
+      g1.gain.setValueAtTime(0.25, ctx.currentTime);
+      g1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.7);
+      r1.connect(g1);
+      g1.connect(ctx.destination);
+      r1.start();
+      r1.stop(ctx.currentTime + 0.7);
+
+      // Lower harmonic for body
+      const r2 = ctx.createOscillator();
+      const g2 = ctx.createGain();
+      r2.frequency.value = 740;
+      r2.type = 'sine';
+      g2.gain.setValueAtTime(0.15, ctx.currentTime);
+      g2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+      r2.connect(g2);
+      g2.connect(ctx.destination);
+      r2.start();
+      r2.stop(ctx.currentTime + 0.4);
+    } catch(e) {}
+  }
+
+  function triggerFlash(flashElement) {
+    if (!flashElement) return;
+    flashElement.classList.add('active');
+    setTimeout(() => flashElement.classList.remove('active'), 500);
+  }
+
+  function showPRCelebration() {
+    const overlay = document.getElementById('pr-overlay');
+    if (!overlay) return;
+    overlay.classList.add('active');
+
+    setTimeout(() => {
+      const img = document.getElementById('pr-overlay-img');
+      const flash = document.getElementById('pr-flash');
+      if (img) fireForgeEffect(img);
+      triggerFlash(flash);
+      playAnvilStrike();
+    }, 200);
+
+    setTimeout(() => {
+      overlay.classList.remove('active');
+    }, 2800);
   }
 
   // ===== INFO PANEL =====
@@ -1222,7 +1481,12 @@ Store.saveActiveWorkout({
   // ===== PR TAB =====
   function renderPRs(el) {
     const prs = Store.getPRs();
-    const prList = Object.values(prs).sort((a, b) => b.e1rm - a.e1rm);
+    const prList = Object.values(prs).sort((a, b) => {
+      if (a.isTime && b.isTime) return (b.bestTime || 0) - (a.bestTime || 0);
+      if (a.isTime) return 1;
+      if (b.isTime) return -1;
+      return b.e1rm - a.e1rm;
+    });
 
     if (prList.length === 0) {
       el.innerHTML = `
@@ -1242,9 +1506,9 @@ Store.saveActiveWorkout({
           <div class="pr-item">
             <div>
               <div class="pr-item-name">${pr.name}</div>
-              <div class="pr-item-detail">${pr.weight} × ${pr.reps} · ${new Date(pr.date).toLocaleDateString()}</div>
+              <div class="pr-item-detail">${pr.isTime ? new Date(pr.date).toLocaleDateString() : `${pr.weight} × ${pr.reps} · ${new Date(pr.date).toLocaleDateString()}`}</div>
             </div>
-            <div class="pr-item-value">${pr.e1rm} ${state.weightUnit}</div>
+            <div class="pr-item-value">${pr.isTime ? pr.bestTime + 's' : pr.e1rm + ' ' + state.weightUnit}</div>
           </div>
         `).join('')}
       </div>
@@ -1443,6 +1707,7 @@ Store.saveActiveWorkout({
     toggleTimer: toggleTimer,
     adjWeight,
     adjSeconds,
+    toggleStopwatch,
     setBWMode,
     saveSettings,
     exportData,
