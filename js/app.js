@@ -824,6 +824,7 @@
 
     // Sync to Google Sheets
     syncToSheets(logEntry);
+    backupToSheets();
   }
 
   function advanceCycle() {
@@ -854,6 +855,22 @@
         method: 'POST',
         body: JSON.stringify({ rows })
       }).catch(e => console.error('Sheets sync failed:', e));
+    } catch(e) {}
+  }
+
+  function backupToSheets() {
+    if (!state.sheetsUrl) return;
+    try {
+      var backup = {
+        logs: Store.getLogs(),
+        prs: Store.getPRs(),
+        settings: Store.getSettings(),
+        completedDays: Store.getCompletedDays()
+      };
+      fetch(state.sheetsUrl, {
+        method: 'POST',
+        body: JSON.stringify({ backup: backup })
+      }).catch(function(e) { console.error('Backup failed:', e); });
     } catch(e) {}
   }
 
