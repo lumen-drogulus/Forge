@@ -465,10 +465,11 @@ Store.saveActiveWorkout({
     const editingSet = state.editingSetIndex !== null ? log.sets[state.editingSetIndex] : null;
     const lastWeight = editingSet ? editingSet.weight : (log.sets.length > 0 ? log.sets[log.sets.length - 1].weight : (prevData ? prevData.weight : ''));
 
-    // Build rep options
+    // Build rep options (or seconds for time-tracked exercises)
+    const isTimeMode = ex.trackMode === 'time';
     const editReps = editingSet ? (editingSet.repsDisplay || editingSet.reps) : undefined;
-    const repOptions = buildRepOptions(ex.reps, editReps);
-
+    const repOptions = isTimeMode ? '' : buildRepOptions(ex.reps, editReps);
+    const lastSeconds = isTimeMode ? (editingSet ? editingSet.reps : (log.sets.length > 0 ? log.sets[log.sets.length - 1].reps : 30)) : 0;
     const allSetsDone = currentSet >= numSets;
 
     el.innerHTML = `
@@ -547,14 +548,21 @@ Store.saveActiveWorkout({
             `}
           </div>
           <div class="input-group">
-            <label>Reps</label>
-            <div class="select-wrap">
-              <select class="reps-select" id="reps-input">
-                ${repOptions}
-              </select>
-            </div>
+            <label>${isTimeMode ? 'Seconds' : 'Reps'}</label>
+            ${isTimeMode ? `
+              <div class="weight-input-wrap">
+                <button class="weight-adj" onclick="FORGE.adjSeconds(-5)">-5</button>
+                <input type="number" class="weight-input ${typeClass}" id="seconds-input" value="${lastSeconds}" inputmode="numeric" placeholder="0">
+                <button class="weight-adj" onclick="FORGE.adjSeconds(5)">+5</button>
+              </div>
+            ` : `
+              <div class="select-wrap">
+                <select class="reps-select" id="reps-input">
+                  ${repOptions}
+                </select>
+              </div>
+            `}
           </div>
-        </div>
 
         <div class="rest-timer ${state.timerRunning ? 'active' : ''} ${typeClass}" id="rest-timer">
           <div class="rest-timer-left">
@@ -595,9 +603,14 @@ Store.saveActiveWorkout({
     const log = state.activeWorkoutLog.exercises[state.currentExerciseIndex];
     const isBW = ex.weightMode === 'bw';
 
-    let weight, reps, display;
+   let weight, reps, display;
 
-    if (isBW) {
+    if (ex.trackMode === 'time') {
+      weight = state.bodyWeight;
+      const seconds = parseInt(document.getElementById('seconds-input').value) || 0;
+      reps = String(seconds);
+      display = `BW · ${seconds}s`;
+    } else if (isBW) {
       weight = state.bodyWeight;
       reps = document.getElementById('reps-input').value;
       display = `BW × ${reps}`;
@@ -634,8 +647,8 @@ Store.saveActiveWorkout({
       startTimer(ex.rest);
     }
 
-    // Check for PR
-    if (repsNum > 0 && weight > 0) {
+    // Check for PR (skip for time-based exercises — seconds aren't comparable to e1RM)
+    if (repsNum > 0 && weight > 0 && ex.trackMode !== 'time') {
       checkAndUpdatePR(ex.id, ex.name, weight, repsNum);
     }
 
@@ -660,7 +673,12 @@ Store.saveActiveWorkout({
 
     let weight, reps, display;
 
-    if (isBW) {
+    if (ex.trackMode === 'time') {
+      weight = state.bodyWeight;
+      const seconds = parseInt(document.getElementById('seconds-input').value) || 0;
+      reps = String(seconds);
+      display = `BW · ${seconds}s`;
+    } else if (isBW) {
       weight = state.bodyWeight;
       reps = document.getElementById('reps-input').value;
       display = `BW × ${reps}`;
@@ -688,7 +706,7 @@ Store.saveActiveWorkout({
       timestamp: Date.now()
     };
 
-    if (repsNum > 0 && weight > 0) {
+    if (repsNum > 0 && weight > 0 && ex.trackMode !== 'time') {
       checkAndUpdatePR(ex.id, ex.name, weight, repsNum);
     }
 
@@ -1053,6 +1071,13 @@ Store.saveActiveWorkout({
     input.value = Math.max(0, current + amount);
   }
 
+  function adjSeconds(amount) {
+    const input = document.getElementById('seconds-input');
+    if (!input) return;
+    const current = parseInt(input.value) || 0;
+    input.value = Math.max(0, current + amount);
+  }
+
   function setBWMode(mode) {
     const day = FORGE_DATA.cycleDays[state.cycleIndex];
     const workout = FORGE_DATA.workouts[day.id];
@@ -1063,8 +1088,8 @@ Store.saveActiveWorkout({
 
   function buildRepOptions(repsStr, selectedValue) {
     if (repsStr === 'to failure' || repsStr === 'max time' || repsStr === 'max each leg') {
-      let opts = `<option value="F" ${selectedValue === 'F' || selectedValue === 0 ? 'selected' : ''}>Failure</option>`;
-      for (let i = 1; i <= 50; i++) opts += `<option value="${i}" ${i == selectedValue ? 'selected' : ''}>${i}</option>`;
+      let opts = '';
+      for (let i = 1; i <= 50; i++) opts += `<option value="${i}" ${selectedValue !== undefined ? (i == selectedValue ? 'selected' : '') : (i === 8 ? 'selected' : '')}>${i}</option>`;
       return opts;
     }
     const match = repsStr.match(/(\d+)-?(\d+)?/);
@@ -1417,6 +1442,7 @@ Store.saveActiveWorkout({
     showInfo,
     toggleTimer: toggleTimer,
     adjWeight,
+    adjSeconds,
     setBWMode,
     saveSettings,
     exportData,
