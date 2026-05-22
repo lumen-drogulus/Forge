@@ -161,6 +161,18 @@ html, body {
   letter-spacing: 1px;
   text-transform: uppercase;
 }
+.calendar-nav-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+.calendar-nav-btn:active {
+  background: var(--bg-card);
+}
 .calendar-nav {
   display: flex;
   gap: 8px;
@@ -193,19 +205,28 @@ html, body {
   position: relative;
 }
 .cal-day.empty { cursor: default; }
-.cal-day.power-done {
-  color: var(--text-primary);
-  background: var(--amber-glow);
-  border-bottom: 2px solid var(--amber);
+.cal-day.workout-done {
+  position: relative;
+  color: var(--green);
+  font-weight: 700;
+  background: var(--green-glow);
 }
-.cal-day.hypertrophy-done {
-  color: var(--text-primary);
-  background: var(--cyan-glow);
-  border-bottom: 2px solid var(--cyan);
+.cal-num { position: relative; z-index: 1; }
+.cal-x {
+  position: absolute;
+  top: 0;
+  right: 2px;
+  font-size: 7px;
+  color: var(--green);
+  font-weight: 700;
+  line-height: 1;
 }
 .cal-day.rest-done {
   color: var(--text-muted);
-  background: rgba(55, 65, 81, 0.3);
+  background: rgba(55, 65, 81, 0.2);
+}
+.cal-day.missed {
+  color: var(--border);
 }
 .cal-day.today {
   color: var(--bg-primary);
