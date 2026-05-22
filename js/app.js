@@ -850,7 +850,7 @@
           });
         });
       });
-      ffetch(state.sheetsUrl, {
+      fetch(state.sheetsUrl, {
         method: 'POST',
         body: JSON.stringify({ rows })
       }).catch(e => console.error('Sheets sync failed:', e));
