@@ -154,9 +154,12 @@
 
   // ===== HOME SCREEN =====
   function renderHome(el) {
-    const today = new Date();
-    state.calendarMonth = today.getMonth();
-    state.calendarYear = today.getFullYear();
+    if (!state._calendarNavActive) {
+      const today = new Date();
+      state.calendarMonth = today.getMonth();
+      state.calendarYear = today.getFullYear();
+    }
+    state._calendarNavActive = false;
     const day = FORGE_DATA.cycleDays[state.cycleIndex];
     const workout = FORGE_DATA.workouts[day.id];
     const isRest = day.type === 'rest';
