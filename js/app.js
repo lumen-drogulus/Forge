@@ -123,6 +123,7 @@
     state.currentSetIndex = saved.currentSetIndex || 0;
     state.skippedExercises = saved.skippedExercises || [];
     state.activeWorkoutLog = saved.activeWorkoutLog;
+    state.workoutStartTime = saved.workoutStartTime || null;
   }
 
   function persistWorkoutState() {
@@ -130,13 +131,14 @@
       Store.saveActiveWorkout(null);
       return;
     }
-    Store.saveActiveWorkout({
+Store.saveActiveWorkout({
       cycleIndex: state.cycleIndex,
       workoutPhase: state.workoutPhase,
       currentExerciseIndex: state.currentExerciseIndex,
       currentSetIndex: state.currentSetIndex,
       skippedExercises: state.skippedExercises,
-      activeWorkoutLog: state.activeWorkoutLog
+      activeWorkoutLog: state.activeWorkoutLog,
+      workoutStartTime: state.workoutStartTime
     });
   }
 
@@ -798,12 +800,15 @@
     const totalSets = state.activeWorkoutLog.exercises.reduce((sum, e) => sum + e.sets.length, 0);
     const totalReps = state.activeWorkoutLog.exercises.reduce((sum, e) =>
       sum + e.sets.reduce((s, set) => s + (set.reps || 0), 0), 0);
+    const durationMs = state.workoutStartTime ? Date.now() - state.workoutStartTime : 0;
+    const durationMin = Math.round(durationMs / 60000);
+    const durationStr = durationMin > 0 ? `${durationMin} min · ` : '';
 
     el.innerHTML = `
       <div class="complete-screen">
         <div class="complete-icon"><i class="ti ti-check"></i></div>
         <div class="complete-title">FORGED</div>
-        <div class="complete-detail">${day.name} · ${day.label} complete<br>${totalSets} sets · ${totalReps} reps</div>
+        <div class="complete-detail">${day.name} · ${day.label} complete<br>${durationStr}${totalSets} sets · ${totalReps} reps</div>
         <button class="complete-btn" onclick="FORGE.finishAndGoHome()">DONE</button>
       </div>
     `;
@@ -821,6 +826,7 @@
     state.currentSetIndex = 0;
     state.skippedExercises = [];
     state.activeWorkoutLog = null;
+    state.workoutStartTime = null;
     stopTimer();
     persistWorkoutState();
   }
@@ -838,9 +844,12 @@
   function saveWorkoutToStorage() {
     const logs = Store.getLogs();
     const dateKey = new Date().toISOString().split('T')[0];
+    const durationMs = state.workoutStartTime ? Date.now() - state.workoutStartTime : 0;
+    const durationMin = Math.round(durationMs / 60000);
     const logEntry = {
       ...state.activeWorkoutLog,
-      completedAt: new Date().toISOString()
+      completedAt: new Date().toISOString(),
+      durationMin: durationMin
     };
 
     if (!logs[state.activeWorkoutLog.dayId]) logs[state.activeWorkoutLog.dayId] = [];
@@ -868,7 +877,7 @@
   function syncToSheets(logEntry) {
     if (!state.sheetsUrl) return;
     try {
-      const rows = [];
+     const rows = [];
       logEntry.exercises.forEach(ex => {
         ex.sets.forEach((set, i) => {
           rows.push({
@@ -878,7 +887,8 @@
             set: i + 1,
             weight: set.weight,
             reps: set.reps,
-            display: set.display
+            display: set.display,
+            durationMin: logEntry.durationMin || 0
           });
         });
       });
