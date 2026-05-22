@@ -58,24 +58,54 @@
 
   // ===== INIT =====
   function init() {
-    const settings = Store.getSettings();
+    var settings = Store.getSettings();
     state.cycleIndex = settings.cycleIndex || 0;
     state.bodyWeight = settings.bodyWeight || 180;
     state.weightUnit = settings.weightUnit || 'lbs';
     state.sheetsUrl = settings.sheetsUrl || FORGE_DATA.sheetsWebhookUrl || '';
+
+    // If localStorage is empty, try restoring from Sheets backup
+    var logs = Store.getLogs();
+    if (Object.keys(logs).length === 0 && FORGE_DATA.sheetsWebhookUrl) {
+      restoreFromSheets().then(function(restored) {
+        if (restored) {
+          var s = Store.getSettings();
+          state.cycleIndex = s.cycleIndex || 0;
+          state.bodyWeight = s.bodyWeight || 180;
+          state.weightUnit = s.weightUnit || 'lbs';
+        }
+        setupNavigation();
+        restoreActiveWorkout();
+        renderTab('home');
+        hideSplash();
+        registerSW();
+      });
+      return;
+    }
 
     setupNavigation();
     restoreActiveWorkout();
     renderTab('home');
     hideSplash();
     registerSW();
+  }
 
-    // Save workout state when app goes to background (before OS kills the tab)
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden' && state.workoutActive) {
-        persistWorkoutState();
-      }
-    });
+  function restoreFromSheets() {
+    return fetch(FORGE_DATA.sheetsWebhookUrl)
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.status === 'empty') return false;
+        if (data.logs) Store.saveLogs(data.logs);
+        if (data.prs) Store.savePRs(data.prs);
+        if (data.settings) Store.saveSettings(data.settings);
+        if (data.completedDays) Store.set('completedDays', data.completedDays);
+        console.log('FORGE: Restored from Sheets backup');
+        return true;
+      })
+      .catch(function(e) {
+        console.error('FORGE: Restore failed:', e);
+        return false;
+      });
   }
 
   function restoreActiveWorkout() {
