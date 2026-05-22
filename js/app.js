@@ -21,6 +21,7 @@
     bodyWeight: 180,         // default, configurable in settings
     sheetsUrl: '',           // Google Sheets webhook URL
     weightUnit: 'lbs',
+    workoutStartTime: null,
     calendarMonth: new Date().getMonth(),
     calendarYear: new Date().getFullYear()
   };
