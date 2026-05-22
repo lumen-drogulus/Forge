@@ -273,12 +273,14 @@
   function calendarPrev() {
     state.calendarMonth--;
     if (state.calendarMonth < 0) { state.calendarMonth = 11; state.calendarYear--; }
+    state._calendarNavActive = true;
     renderHome(document.getElementById('main-content'));
   }
 
   function calendarNext() {
     state.calendarMonth++;
     if (state.calendarMonth > 11) { state.calendarMonth = 0; state.calendarYear++; }
+    state._calendarNavActive = true;
     renderHome(document.getElementById('main-content'));
   }
 
