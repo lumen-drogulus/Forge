@@ -62,7 +62,7 @@
     state.cycleIndex = settings.cycleIndex || 0;
     state.bodyWeight = settings.bodyWeight || 180;
     state.weightUnit = settings.weightUnit || 'lbs';
-    state.sheetsUrl = settings.sheetsUrl || '';
+    state.sheetsUrl = settings.sheetsUrl || FORGE_DATA.sheetsWebhookUrl || '';
 
     setupNavigation();
     restoreActiveWorkout();
