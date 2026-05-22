@@ -297,8 +297,7 @@ Store.saveActiveWorkout({
           <button class="calendar-nav-btn" onclick="FORGE.calendarNext()"><i class="ti ti-chevron-right"></i></button>
         </div>
         ${grid}
-        <div class="calendar-legend">
-          <div><span class="legend-dot" style="background:var(--green)"></span>Done</div>
+       <div class="calendar-legend">
           <div><span class="legend-dot" style="background:var(--amber)"></span>Power</div>
           <div><span class="legend-dot" style="background:var(--cyan)"></span>Hypertrophy</div>
           <div><span class="legend-dot" style="background:var(--gray)"></span>Rest</div>
