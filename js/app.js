@@ -850,10 +850,9 @@
           });
         });
       });
-      fetch(state.sheetsUrl, {
+      ffetch(state.sheetsUrl, {
         method: 'POST',
-        body: JSON.stringify({ rows }),
-        mode: 'no-cors'
+        body: JSON.stringify({ rows })
       }).catch(() => {});
     } catch(e) {}
   }
