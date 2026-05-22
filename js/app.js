@@ -147,23 +147,10 @@ Store.saveActiveWorkout({
   }
 
   function hideSplash() {
-    // Phase 1: sparks + anvil + flash on the logo after brief delay
-    setTimeout(() => {
-      const logo = document.getElementById('splash-logo');
-      const flash = document.getElementById('splash-flash');
-      if (logo) fireForgeEffect(logo);
-      triggerFlash(flash);
-      playAnvilStrike();
-    }, 800);
-
-    // Phase 2: fade out splash
     setTimeout(() => {
       const splash = document.getElementById('splash');
-      if (splash) {
-        splash.classList.add('hidden');
-        setTimeout(() => splash.remove(), 600);
-      }
-    }, 2200);
+      if (splash) { splash.classList.add('hidden'); setTimeout(() => splash.remove(), 600); }
+    }, 2000);
   }
 
   function registerSW() {
@@ -1202,10 +1189,18 @@ Store.saveActiveWorkout({
   function toggleStopwatch() {
     if (state.stopwatchRunning) {
       stopStopwatch();
-      // Fill the seconds input with elapsed time
+      // Fill the seconds input with elapsed time — NO re-render, just update DOM directly
       const input = document.getElementById('seconds-input');
       if (input) input.value = state.stopwatchElapsed;
-      renderExercise(document.getElementById('main-content'));
+      // Reset widget appearance without rebuilding the page
+      const display = document.getElementById('stopwatch-display');
+      if (display) display.textContent = formatTime(state.stopwatchElapsed);
+      const widget = document.getElementById('stopwatch-widget');
+      if (widget) {
+        widget.classList.remove('running');
+        const icon = widget.querySelector('.stopwatch-icon');
+        if (icon) { icon.classList.remove('ti-player-stop'); icon.classList.add('ti-player-play'); }
+      }
     } else {
       startStopwatch();
     }
@@ -1270,31 +1265,6 @@ Store.saveActiveWorkout({
   }
 
   // ===== FORGE EFFECT SYSTEM =====
-  function fireForgeEffect(targetElement) {
-    const rect = targetElement.getBoundingClientRect();
-    const cx = rect.left + rect.width / 2;
-    const cy = rect.top + rect.height / 2;
-
-    // Create sparks
-    const sparkCount = 14;
-    for (let i = 0; i < sparkCount; i++) {
-      const spark = document.createElement('div');
-      spark.className = 'forge-spark';
-      const angle = (i / sparkCount) * 360 + (Math.random() * 25 - 12);
-      const distance = 50 + Math.random() * 90;
-      const rad = angle * Math.PI / 180;
-      spark.style.left = cx + 'px';
-      spark.style.top = cy + 'px';
-      spark.style.setProperty('--dx', Math.cos(rad) * distance + 'px');
-      spark.style.setProperty('--dy', Math.sin(rad) * distance + 'px');
-      spark.style.animationDelay = (Math.random() * 0.15) + 's';
-      spark.style.width = (2 + Math.random() * 3) + 'px';
-      spark.style.height = spark.style.width;
-      document.body.appendChild(spark);
-      spark.addEventListener('animationend', () => spark.remove());
-    }
-  }
-
   function playAnvilStrike() {
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -1352,9 +1322,7 @@ Store.saveActiveWorkout({
     overlay.classList.add('active');
 
     setTimeout(() => {
-      const img = document.getElementById('pr-overlay-img');
       const flash = document.getElementById('pr-flash');
-      if (img) fireForgeEffect(img);
       triggerFlash(flash);
       playAnvilStrike();
     }, 200);
