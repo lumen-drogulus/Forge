@@ -929,7 +929,7 @@ Store.saveActiveWorkout({
 
     // Save completed day for calendar
     const completed = Store.getCompletedDays();
-    const day = FORGE_DATA.cycleDays[(state.cycleIndex + 7) % 8];
+    const day = FORGE_DATA.cycleDays[state.cycleIndex];
     completed.push({ date: dateKey, type: day.type, dayId: day.id });
     Store.set('completedDays', completed);
 
