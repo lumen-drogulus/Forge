@@ -287,7 +287,8 @@ Store.saveActiveWorkout({
       } else if (isPast && isTracked) {
         cls += ' missed';
       } else if (!isPast && !isToday) {
-        const daysAhead = Math.round((thisDate - today) / (1000 * 60 * 60 * 24));
+        const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        const daysAhead = Math.round((thisDate - todayMidnight) / (1000 * 60 * 60 * 24));
         const futureIdx = ((state.cycleIndex + daysAhead) % 8 + 8) % 8;
         const futureType = FORGE_DATA.cycleDays[futureIdx].type;
         cls += ` future-planned ${futureType === 'hypertrophy' ? 'hypertrophy-type' : futureType === 'rest' ? 'rest-type' : 'power-type'}`;
