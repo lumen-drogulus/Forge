@@ -61,6 +61,11 @@
     }
   };
 
+  function todayLocal() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+  
   // ===== INIT =====
   function init() {
     var settings = Store.getSettings();
@@ -895,7 +900,7 @@ Store.saveActiveWorkout({
   }
 
   function skipRestDay() {
-    const today = new Date().toISOString().split('T')[0];
+    const today = todayLocal();
     const completed = Store.getCompletedDays();
     completed.push({ date: today, type: 'rest', dayId: 'rest' });
     Store.set('completedDays', completed);
@@ -906,7 +911,7 @@ Store.saveActiveWorkout({
   // ===== STORAGE & SYNC =====
   function saveWorkoutToStorage() {
     const logs = Store.getLogs();
-    const dateKey = new Date().toISOString().split('T')[0];
+    const dateKey = todayLocal();
     const durationMs = state.workoutStartTime ? Date.now() - state.workoutStartTime : 0;
     const durationMin = Math.round(durationMs / 60000);
     const logEntry = {
@@ -1606,7 +1611,7 @@ Store.saveActiveWorkout({
   }
   
   function clearToday() {
-    const today = new Date().toISOString().split('T')[0];
+    const today = todayLocal();
     const completed = Store.getCompletedDays();
     const todayEntry = completed.find(c => c.date === today);
 
