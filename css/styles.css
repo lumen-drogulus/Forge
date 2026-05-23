@@ -205,22 +205,6 @@ html, body {
   position: relative;
 }
 .cal-day.empty { cursor: default; }
-.cal-day.workout-done {
-  position: relative;
-  color: var(--green);
-  font-weight: 700;
-  background: var(--green-glow);
-}
-.cal-num { position: relative; z-index: 1; }
-.cal-x {
-  position: absolute;
-  top: 0;
-  right: 2px;
-  font-size: 7px;
-  color: var(--green);
-  font-weight: 700;
-  line-height: 1;
-}
 .cal-day.rest-done {
   color: var(--text-muted);
   background: rgba(55, 65, 81, 0.2);
