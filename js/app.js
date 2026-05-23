@@ -273,7 +273,10 @@ Store.saveActiveWorkout({
       let cls = 'cal-day';
       let content = `${d}`;
 
-      if (isToday) {
+      if (isToday && completed && completed.type !== 'rest') {
+        cls += ` today ${completed.type === 'hypertrophy' ? 'hypertrophy-type' : 'power-type'}`;
+        content = '✕';
+      } else if (isToday) {
         const dayType = FORGE_DATA.cycleDays[state.cycleIndex].type;
         cls += ` today ${dayType === 'hypertrophy' ? 'hypertrophy-type' : dayType === 'rest' ? 'rest-type' : 'power-type'}`;
       } else if (completed && completed.type !== 'rest') {
