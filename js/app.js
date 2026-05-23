@@ -74,6 +74,11 @@
     state.weightUnit = settings.weightUnit || 'lbs';
     state.sheetsUrl = settings.sheetsUrl || FORGE_DATA.sheetsWebhookUrl || '';
 
+    // Clean up any completedDays entries stamped to future dates (UTC timezone bug)
+    const todayStr = todayLocal();
+    const cleaned = Store.getCompletedDays().filter(c => c.date <= todayStr);
+    if (cleaned.length !== Store.getCompletedDays().length) Store.set('completedDays', cleaned);
+
     // If localStorage is empty, try restoring from Sheets backup
     var logs = Store.getLogs();
     if (Object.keys(logs).length === 0 && FORGE_DATA.sheetsWebhookUrl) {
