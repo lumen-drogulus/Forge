@@ -1175,3 +1175,153 @@ html, body {
 .stopwatch-widget.running.hypertrophy .stopwatch-time {
   color: var(--cyan);
 }
+
+
+/* ===== RESUME CARD (workout in progress, shown on home) ===== */
+.resume-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-surface);
+  border: 1px solid var(--amber);
+  border-radius: 8px;
+  padding: 14px;
+  cursor: pointer;
+  animation: resume-pulse 2.4s ease-in-out infinite;
+}
+.resume-card.hypertrophy {
+  border-color: var(--cyan);
+  animation-name: resume-pulse-cyan;
+}
+.resume-label {
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--amber);
+}
+.resume-card.hypertrophy .resume-label { color: var(--cyan); }
+.resume-name {
+  font-family: var(--font-display);
+  font-size: 22px;
+  letter-spacing: 1px;
+  margin-top: 2px;
+}
+.resume-detail {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.resume-btn {
+  font-family: var(--font-display);
+  font-size: 14px;
+  letter-spacing: 2px;
+  padding: 10px 16px;
+  border-radius: 6px;
+  background: var(--amber);
+  color: var(--bg-primary);
+  flex-shrink: 0;
+}
+.resume-btn.hypertrophy { background: var(--cyan); }
+@keyframes resume-pulse {
+  0%, 100% { box-shadow: 0 0 0 rgba(245, 158, 11, 0); }
+  50% { box-shadow: 0 0 14px rgba(245, 158, 11, 0.35); }
+}
+@keyframes resume-pulse-cyan {
+  0%, 100% { box-shadow: 0 0 0 rgba(6, 182, 212, 0); }
+  50% { box-shadow: 0 0 14px rgba(6, 182, 212, 0.35); }
+}
+
+/* ===== PLATE CALCULATOR ===== */
+.plate-total {
+  font-size: 42px;
+  text-align: center;
+  color: var(--text-primary);
+  margin: 8px 0 2px;
+}
+.plate-total-unit {
+  font-size: 16px;
+  color: var(--text-muted);
+}
+.plate-per-side {
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+.plate-viz {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 84px;
+  margin-bottom: 4px;
+}
+.plate-viz-bar {
+  width: 64px;
+  height: 8px;
+  background: var(--border-light);
+  border-radius: 2px 0 0 2px;
+}
+.plate-viz-sleeve {
+  width: 22px;
+  height: 8px;
+  background: var(--border-light);
+  border-radius: 0 4px 4px 0;
+}
+.plate-viz-plate {
+  width: 17px;
+  margin: 0 1px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-light);
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.plate-viz-plate:active { background: var(--gray); }
+.plate-viz-plate.p45 { height: 74px; border-color: var(--amber); color: var(--amber); }
+.plate-viz-plate.p35 { height: 64px; }
+.plate-viz-plate.p25 { height: 54px; }
+.plate-viz-plate.p15 { height: 44px; }
+.plate-viz-plate.p10 { height: 36px; }
+.plate-viz-plate.p5  { height: 30px; }
+.plate-hint {
+  text-align: center;
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+}
+.plate-btn-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.plate-btn {
+  flex: 1;
+  padding: 12px 0;
+  border: none;
+  border-radius: 6px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 15px;
+  cursor: pointer;
+}
+.plate-btn:active { background: var(--bg-elevated); }
+.plate-btn.power:active { color: var(--amber); }
+.plate-btn.hypertrophy:active { color: var(--cyan); }
+.plate-bar-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.plate-bar-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-right: 4px;
+}
