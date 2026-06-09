@@ -28,7 +28,8 @@
     stopwatchRunning: false,
     stopwatchStart: 0,
     stopwatchInterval: null,
-    stopwatchElapsed: 0
+    stopwatchElapsed: 0,
+    plateCalc: { bar: 45, plates: [] }
   };
 
   // ===== STORAGE =====
@@ -224,14 +225,13 @@ Store.saveActiveWorkout({
   function setupNavigation() {
     document.querySelectorAll('.nav-item').forEach(btn => {
       btn.addEventListener('click', () => {
-        if (state.workoutActive && btn.dataset.tab === 'home') {
-          renderWorkoutView();
-          return;
-        }
         renderTab(btn.dataset.tab);
       });
     });
-    document.getElementById('info-backdrop').addEventListener('click', closeInfoPanel);
+    document.getElementById('info-backdrop').addEventListener('click', () => {
+      closeInfoPanel();
+      closePlateCalc();
+    });
     document.getElementById('settings-btn').addEventListener('click', () => renderTab('settings'));
   }
 
@@ -243,7 +243,7 @@ Store.saveActiveWorkout({
 
     const main = document.getElementById('main-content');
     switch(tab) {
-      case 'home': state.workoutActive ? renderWorkoutView() : renderHome(main); break;
+      case 'home': renderHome(main); break;
       case 'tracker': renderTracker(main); break;
       case 'prs': renderPRs(main); break;
       case 'settings': renderSettings(main); break;
@@ -277,16 +277,49 @@ Store.saveActiveWorkout({
           <div class="today-day-badge">Day ${state.cycleIndex + 1}/8</div>
         </div>
       </div>
-      ${isRest ? `
+      ${buildActionArea(isRest, typeClass)}
+    `;
+  }
+
+  // Decides what sits below the today card: a resume card if a workout is
+  // in progress, otherwise the normal START / REST button.
+  function buildActionArea(isRest, typeClass) {
+    if (state.workoutActive && state.activeWorkoutLog) {
+      const wLog = state.activeWorkoutLog;
+      const wDay = FORGE_DATA.cycleDays.find(d => d.id === wLog.dayId);
+      const wType = wDay && wDay.type === 'hypertrophy' ? 'hypertrophy' : 'power';
+      const doneEx = wLog.exercises.filter(e => e.completed).length;
+      const setsLogged = wLog.exercises.reduce((s, e) => s + e.sets.length, 0);
+      return `
+        <div class="resume-card ${wType}" onclick="FORGE.resumeWorkout()">
+          <div>
+            <div class="resume-label">Workout in progress</div>
+            <div class="resume-name">${wDay ? wDay.name : wLog.dayId}</div>
+            <div class="resume-detail">${doneEx}/${wLog.exercises.length} exercises · ${setsLogged} sets logged</div>
+          </div>
+          <div class="resume-btn ${wType}">RESUME</div>
+        </div>
+      `;
+    }
+    if (isRest) {
+      return `
         <button class="start-btn" style="background:var(--gray);color:var(--text-secondary);" onclick="FORGE.skipRestDay()">
           COMPLETE REST DAY
         </button>
-      ` : `
-        <button class="start-btn ${typeClass}" onclick="FORGE.startWorkout()">
-          START WORKOUT
-        </button>
-      `}
+      `;
+    }
+    return `
+      <button class="start-btn ${typeClass}" onclick="FORGE.startWorkout()">
+        START WORKOUT
+      </button>
     `;
+  }
+
+  // Jumps back into the active workout exactly where you left off
+  // (phase and exercise index live in state, restored on boot if needed)
+  function resumeWorkout() {
+    if (!state.workoutActive) { renderTab('home'); return; }
+    renderWorkoutView();
   }
 
   function renderCycleBar() {
@@ -563,6 +596,10 @@ Store.saveActiveWorkout({
         <button class="action-btn" onclick="window.open('${ex.video}', '_blank')">
           <i class="ti ti-player-play"></i> Demo
         </button>
+        ${!isBW ? `
+        <button class="action-btn" onclick="FORGE.openPlateCalc()">
+          <i class="ti ti-barbell"></i> Plates
+        </button>` : ''}
       </div>
 
       <div class="stats-row">
@@ -1405,6 +1442,75 @@ Store.saveActiveWorkout({
     }, 2800);
   }
 
+  // ===== PLATE CALCULATOR =====
+  // Slide-up panel. Tap a plate weight to load one on EACH side (symmetric),
+  // tap a plate on the bar graphic to pull that pair back off.
+  const PLATE_SIZES = [45, 35, 25, 15, 10, 5];
+
+  function openPlateCalc() {
+    renderPlateCalc();
+    document.getElementById('plate-panel').classList.add('open');
+    document.getElementById('info-backdrop').classList.add('open');
+  }
+
+  function closePlateCalc() {
+    const panel = document.getElementById('plate-panel');
+    if (panel) panel.classList.remove('open');
+    document.getElementById('info-backdrop').classList.remove('open');
+  }
+
+  function renderPlateCalc() {
+    const pc = state.plateCalc;
+    const perSide = pc.plates.reduce((s, p) => s + p, 0);
+    const total = pc.bar + perSide * 2;
+    const day = FORGE_DATA.cycleDays[state.cycleIndex];
+    const typeClass = day.type === 'hypertrophy' ? 'hypertrophy' : 'power';
+
+    const content = document.getElementById('plate-panel-content');
+    if (!content) return;
+    content.innerHTML = `
+      <div class="info-panel-title">Plate Calculator</div>
+      <div class="plate-total font-mono">${total} <span class="plate-total-unit">${state.weightUnit}</span></div>
+      <div class="plate-per-side">${perSide} ${state.weightUnit} per side · ${pc.bar} ${state.weightUnit} bar</div>
+      <div class="plate-viz">
+        <div class="plate-viz-bar"></div>
+        ${pc.plates.map((p, i) => `<div class="plate-viz-plate p${p}" onclick="FORGE.plateRemoveAt(${i})">${p}</div>`).join('')}
+        <div class="plate-viz-sleeve"></div>
+      </div>
+      <div class="plate-hint">${pc.plates.length > 0 ? 'Tap a plate to remove it from both sides' : 'Tap a weight below to load the bar'}</div>
+      <div class="plate-btn-row">
+        ${PLATE_SIZES.map(p => `<button class="plate-btn ${typeClass}" onclick="FORGE.plateAdd(${p})">${p}</button>`).join('')}
+      </div>
+      <div class="plate-bar-row">
+        <span class="plate-bar-label">Bar</span>
+        <button class="bw-btn ${pc.bar === 45 ? 'active' : ''} ${typeClass}" onclick="FORGE.plateBar(45)">45 lb</button>
+        <button class="bw-btn ${pc.bar === 35 ? 'active' : ''} ${typeClass}" onclick="FORGE.plateBar(35)">35 lb</button>
+        <button class="bw-btn" style="color:var(--red);" onclick="FORGE.plateClear()">Clear</button>
+      </div>
+    `;
+  }
+
+  function plateAdd(w) {
+    state.plateCalc.plates.push(w);
+    state.plateCalc.plates.sort((a, b) => b - a); // heaviest closest to the bar
+    renderPlateCalc();
+  }
+
+  function plateRemoveAt(i) {
+    state.plateCalc.plates.splice(i, 1);
+    renderPlateCalc();
+  }
+
+  function plateBar(w) {
+    state.plateCalc.bar = w;
+    renderPlateCalc();
+  }
+
+  function plateClear() {
+    state.plateCalc.plates = [];
+    renderPlateCalc();
+  }
+
   // ===== INFO PANEL =====
   function showInfo() {
     const day = FORGE_DATA.cycleDays[state.cycleIndex];
@@ -1467,6 +1573,7 @@ Store.saveActiveWorkout({
       const totalSets = log.exercises.reduce((s, e) => s + e.sets.length, 0);
       const totalReps = log.exercises.reduce((s, e) =>
         s + e.sets.reduce((r, set) => r + (set.reps || 0), 0), 0);
+      const durStr = log.durationMin > 0 ? ` · ${log.durationMin} min` : '';
       const typeClass = dayInfo && dayInfo.type === 'hypertrophy' ? 'text-cyan' : 'text-amber';
       const borderColor = dayInfo && dayInfo.type === 'hypertrophy' ? 'var(--cyan)' : 'var(--amber)';
 
@@ -1501,7 +1608,7 @@ Store.saveActiveWorkout({
           <div class="wo-item" style="margin-bottom:0;border-left:2px solid ${borderColor};" onclick="FORGE.toggleWorkoutDetail(${idx})">
             <div class="wo-item-info">
               <div class="wo-item-name"><span class="${typeClass}">${dayInfo ? dayInfo.name : log.dayId}</span> <span class="text-muted" style="font-weight:400;font-size:12px;">${dayInfo ? dayInfo.label : ''}</span></div>
-              <div class="wo-item-detail">${date} · ${totalSets} sets · ${totalReps} reps</div>
+              <div class="wo-item-detail">${date} · ${totalSets} sets · ${totalReps} reps${durStr}</div>
             </div>
             <div class="wo-item-status"><i class="ti ti-chevron-down" id="workout-chevron-${idx}" style="transition:transform 0.2s;"></i></div>
           </div>
@@ -1759,7 +1866,14 @@ Store.saveActiveWorkout({
     clearData,
     clearToday,
     toggleWorkoutDetail,
-    importData
+    importData,
+    resumeWorkout,
+    openPlateCalc,
+    closePlateCalc,
+    plateAdd,
+    plateRemoveAt,
+    plateBar,
+    plateClear
   };
 
   // ===== BOOT =====
