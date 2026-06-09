@@ -17,6 +17,7 @@
     activeWorkoutLog: null,
     timerInterval: null,
     timerRemaining: 0,
+    timerEndAt: 0,
     timerRunning: false,
     bodyWeight: 180,         // default, configurable in settings
     sheetsUrl: '',           // Google Sheets webhook URL
@@ -65,6 +66,52 @@
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   }
+
+  // Converts any stored ISO timestamp (UTC) to the LOCAL calendar date it happened on.
+  // Fixes the family of bugs where evening workouts got stamped with tomorrow's date.
+  function localDateOf(isoString) {
+    const d = new Date(isoString);
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+
+  // ===== CALENDAR DATA MIGRATION =====
+  // Rebuilds completedDays from the workout logs on every boot.
+  // Why: old code stamped completed days with the WRONG cycle day (the +7 offset bug),
+  // so Push A / Push B days were saved as type "rest" and never rendered an X mark.
+  // Logs always carried the correct dayId, so they are the source of truth.
+  // Runs in milliseconds, is safe to repeat, and self-heals after a Sheets restore.
+  function migrateCompletedDays() {
+    const logs = Store.getLogs();
+    const existing = Store.getCompletedDays();
+    const todayStr = todayLocal();
+    const byDate = {};
+
+    // 1. Rebuild workout entries from logs (correct dayId, correct local date)
+    Object.keys(logs).forEach(dayId => {
+      const dayInfo = FORGE_DATA.cycleDays.find(d => d.id === dayId);
+      if (!dayInfo) return;
+      logs[dayId].forEach(log => {
+        if (!log.completedAt) return;
+        const date = localDateOf(log.completedAt);
+        byDate[date] = { date: date, type: dayInfo.type, dayId: dayId };
+      });
+    });
+
+    // 2. Keep genuine rest-day entries (skipRestDay always wrote dayId "rest").
+    //    Poisoned entries (dayId "rest-1"/"rest-2" from the offset bug) are dropped.
+    existing.forEach(c => {
+      if (c.dayId === 'rest' && !byDate[c.date]) {
+        byDate[c.date] = c;
+      }
+    });
+
+    // 3. Drop future-dated ghosts (old UTC bug) and save, sorted by date
+    const rebuilt = Object.values(byDate)
+      .filter(c => c.date <= todayStr)
+      .sort((a, b) => (a.date < b.date ? -1 : 1));
+
+    Store.set('completedDays', rebuilt);
+  }
   
   // ===== INIT =====
   function init() {
@@ -74,10 +121,8 @@
     state.weightUnit = settings.weightUnit || 'lbs';
     state.sheetsUrl = settings.sheetsUrl || FORGE_DATA.sheetsWebhookUrl || '';
 
-    // Clean up any completedDays entries stamped to future dates (UTC timezone bug)
-    const todayStr = todayLocal();
-    const cleaned = Store.getCompletedDays().filter(c => c.date <= todayStr);
-    if (cleaned.length !== Store.getCompletedDays().length) Store.set('completedDays', cleaned);
+    // Rebuild calendar data from logs (fixes wrong types/dates from old bugs)
+    migrateCompletedDays();
 
     // If localStorage is empty, try restoring from Sheets backup
     var logs = Store.getLogs();
@@ -89,6 +134,7 @@
           state.bodyWeight = s.bodyWeight || 180;
           state.weightUnit = s.weightUnit || 'lbs';
         }
+        migrateCompletedDays(); // restored backup may contain old poisoned entries
         setupNavigation();
         restoreActiveWorkout();
         renderTab('home');
@@ -104,6 +150,11 @@
     hideSplash();
     registerSW();
   }
+
+  // Safety net: persist the active workout the instant the app is backgrounded
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') persistWorkoutState();
+  });
 
   function restoreFromSheets() {
     return fetch(FORGE_DATA.sheetsWebhookUrl)
@@ -345,6 +396,7 @@ Store.saveActiveWorkout({
     state.currentExerciseIndex = 0;
     state.currentSetIndex = 0;
     state.skippedExercises = [];
+    state.workoutStartTime = Date.now(); // start the duration clock
     state.activeWorkoutLog = {
       dayId: day.id,
       date: new Date().toISOString(),
@@ -769,6 +821,7 @@ Store.saveActiveWorkout({
 
     state.editingSetIndex = null;
     renderExercise(document.getElementById('main-content'));
+    persistWorkoutState(); // without this, an edited set reverts if the tab is killed
   }
 
   function cancelEdit() {
@@ -837,6 +890,7 @@ Store.saveActiveWorkout({
   function goToWarmup() {
     state.workoutPhase = 'warmup';
     renderWorkoutView();
+    persistWorkoutState();
   }
 
   function warmupDone() {
@@ -844,6 +898,7 @@ Store.saveActiveWorkout({
     state.currentExerciseIndex = 0;
     state.currentSetIndex = 0;
     renderWorkoutView();
+    persistWorkoutState();
   }
 
   function backToOverview() {
@@ -852,6 +907,7 @@ Store.saveActiveWorkout({
     state.editingSetIndex = null;
     state.workoutPhase = 'overview';
     renderWorkoutView();
+    persistWorkoutState();
   }
 
   function completeWorkout() {
@@ -1122,12 +1178,16 @@ Store.saveActiveWorkout({
   }
 
   // ===== REST TIMER =====
+  // Counts down from a fixed end TIMESTAMP instead of subtracting 1 per tick.
+  // Phones throttle background timers, so the old way silently paused when the
+  // screen locked. Clock math can't drift: remaining = endAt minus now.
   function startTimer(duration) {
     stopTimer();
     state.timerRemaining = duration;
+    state.timerEndAt = Date.now() + duration * 1000;
     state.timerRunning = true;
     state.timerInterval = setInterval(() => {
-      state.timerRemaining--;
+      state.timerRemaining = Math.max(0, Math.round((state.timerEndAt - Date.now()) / 1000));
       const display = document.getElementById('timer-display');
       if (display) display.textContent = formatTime(state.timerRemaining);
       if (state.timerRemaining <= 0) {
@@ -1137,7 +1197,7 @@ Store.saveActiveWorkout({
         const display2 = document.getElementById('timer-display');
         if (display2) display2.textContent = 'Done!';
       }
-    }, 1000);
+    }, 500);
   }
 
   function stopTimer() {
@@ -1609,6 +1669,7 @@ Store.saveActiveWorkout({
           state.sheetsUrl = data.settings.sheetsUrl || '';
         }
 
+        migrateCompletedDays(); // imported backups may contain old poisoned entries
         alert('Data imported successfully.');
         renderTab('home');
       } catch (err) {
@@ -1637,8 +1698,10 @@ Store.saveActiveWorkout({
       // Remove from logs
       const logs = Store.getLogs();
       if (logs[todayEntry.dayId]) {
+        // Compare LOCAL dates. completedAt is stored in UTC, so an evening
+        // workout's raw string starts with tomorrow's date and never matched.
         logs[todayEntry.dayId] = logs[todayEntry.dayId].filter(
-          log => !log.completedAt || !log.completedAt.startsWith(today)
+          log => !log.completedAt || localDateOf(log.completedAt) !== today
         );
         if (logs[todayEntry.dayId].length === 0) delete logs[todayEntry.dayId];
         Store.saveLogs(logs);
