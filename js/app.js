@@ -570,7 +570,7 @@ Store.saveActiveWorkout({
     // Build rep options (or seconds for time-tracked exercises)
     const isTimeMode = ex.trackMode === 'time';
     const editReps = editingSet ? (editingSet.repsDisplay || editingSet.reps) : undefined;
-    const repOptions = isTimeMode ? '' : buildRepOptions(ex.reps, editReps);
+    const repsValue = isTimeMode ? 0 : (editingSet ? (parseInt(editingSet.reps) || 0) : (log.sets.length > 0 ? (parseInt(log.sets[log.sets.length - 1].reps) || getDefaultReps(ex.reps)) : getDefaultReps(ex.reps)));
     const lastSeconds = isTimeMode ? (editingSet ? editingSet.reps : (log.sets.length > 0 ? log.sets[log.sets.length - 1].reps : 30)) : 0;
     const allSetsDone = currentSet >= numSets;
 
@@ -686,10 +686,10 @@ Store.saveActiveWorkout({
                 <button class="weight-adj" onclick="FORGE.adjSeconds(5)">+5</button>
               </div>
             ` : `
-              <div class="select-wrap">
-                <select class="reps-select" id="reps-input">
-                  ${repOptions}
-                </select>
+              <div class="weight-input-wrap">
+                <button class="weight-adj" onclick="FORGE.adjReps(-1)">-1</button>
+                <input type="number" class="weight-input ${typeClass}" id="reps-input" value="${repsValue}" inputmode="numeric" placeholder="0">
+                <button class="weight-adj" onclick="FORGE.adjReps(1)">+1</button>
               </div>
             `}
           </div>
@@ -1265,7 +1265,7 @@ Store.saveActiveWorkout({
         gain.connect(ctx.destination);
         osc.frequency.value = freq;
         osc.type = 'square';
-        gain.gain.value = 0.4;
+        gain.gain.value = 0.3;
         const start = ctx.currentTime + i * 0.3;
         osc.start(start);
         osc.stop(start + 0.2);
@@ -1356,23 +1356,19 @@ Store.saveActiveWorkout({
     renderExercise(document.getElementById('main-content'));
   }
 
-  function buildRepOptions(repsStr, selectedValue) {
-    if (repsStr === 'to failure' || repsStr === 'max time' || repsStr === 'max each leg') {
-      let opts = '';
-      for (let i = 1; i <= 50; i++) opts += `<option value="${i}" ${selectedValue !== undefined ? (i == selectedValue ? 'selected' : '') : (i === 8 ? 'selected' : '')}>${i}</option>`;
-      return opts;
-    }
-    const match = repsStr.match(/(\d+)-?(\d+)?/);
-    if (!match) return '<option value="0">0</option>';
-    const low = parseInt(match[1]);
-    const high = match[2] ? parseInt(match[2]) : low;
-    let opts = '';
-    for (let i = Math.max(1, low - 3); i <= high + 5; i++) {
-     opts += `<option value="${i}" ${selectedValue !== undefined ? (i == selectedValue ? 'selected' : '') : (i === low ? 'selected' : '')}>${i}</option>`;
-    }
-    opts += '<option value="F">Failure</option>';
-    return opts;
+  function getDefaultReps(repsStr) {
+    if (repsStr === 'to failure' || repsStr === 'max time' || repsStr === 'max each leg') return 8;
+    const match = repsStr.match(/(\d+)/);
+    return match ? parseInt(match[1]) : 0;
   }
+
+  function adjReps(amount) {
+    const input = document.getElementById('reps-input');
+    if (!input) return;
+    const current = parseInt(input.value) || 0;
+    input.value = Math.max(0, current + amount);
+  }
+
 
   // ===== FORGE EFFECT SYSTEM =====
   function playAnvilStrike() {
@@ -1487,6 +1483,7 @@ Store.saveActiveWorkout({
         <button class="bw-btn ${pc.bar === 35 ? 'active' : ''} ${typeClass}" onclick="FORGE.plateBar(35)">35 lb</button>
         <button class="bw-btn" style="color:var(--red);" onclick="FORGE.plateClear()">Clear</button>
       </div>
+      <button class="save-set-btn ${typeClass}" style="margin-top:14px;" onclick="FORGE.plateApply()">USE ${total} ${state.weightUnit.toUpperCase()}</button>
     `;
   }
 
@@ -1509,6 +1506,14 @@ Store.saveActiveWorkout({
   function plateClear() {
     state.plateCalc.plates = [];
     renderPlateCalc();
+  }
+
+  function plateApply() {
+    const pc = state.plateCalc;
+    const total = pc.bar + pc.plates.reduce((s, p) => s + p, 0) * 2;
+    const input = document.getElementById('weight-input');
+    if (input) input.value = total;
+    closePlateCalc();
   }
 
   // ===== INFO PANEL =====
@@ -1858,6 +1863,7 @@ Store.saveActiveWorkout({
     showInfo,
     toggleTimer: toggleTimer,
     adjWeight,
+    adjReps,
     adjSeconds,
     toggleStopwatch,
     setBWMode,
@@ -1873,7 +1879,8 @@ Store.saveActiveWorkout({
     plateAdd,
     plateRemoveAt,
     plateBar,
-    plateClear
+    plateClear,
+    plateApply
   };
 
   // ===== BOOT =====
