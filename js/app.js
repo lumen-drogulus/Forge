@@ -1797,6 +1797,15 @@ Store.saveActiveWorkout({
     const completed = Store.getCompletedDays();
     const todayEntry = completed.find(c => c.date === today);
 
+    // If there's an active workout but nothing completed yet, just kill the session
+    if (!todayEntry && state.workoutActive) {
+      if (confirm('Cancel the current workout in progress?')) {
+        resetWorkoutState();
+        renderTab('home');
+      }
+      return;
+    }
+
     if (!todayEntry) {
       alert('No workout logged today.');
       return;
@@ -1836,6 +1845,8 @@ Store.saveActiveWorkout({
       if (confirm('Really? This cannot be undone.')) {
         localStorage.clear();
         state.cycleIndex = 0;
+        state.bodyWeight = 180;
+        resetWorkoutState();
         renderTab('home');
       }
     }
