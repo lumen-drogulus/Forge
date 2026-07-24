@@ -1121,9 +1121,9 @@ Store.saveActiveWorkout({
     const exLog = lastLog.exercises.find(e => e.id === exerciseId);
     if (!exLog || exLog.sets.length === 0) return null;
     const lastSet = exLog.sets[exLog.sets.length - 1];
-    const avgWeight = Math.round(exLog.sets.reduce((s, set) => s + set.weight, 0) / exLog.sets.length);
+    const maxWeight = Math.max(...exLog.sets.map(set => set.weight));
     return {
-      weight: avgWeight,
+      weight: maxWeight,
       detail: `${exLog.sets.length}×${lastSet.repsDisplay || lastSet.reps}`
     };
   }
@@ -1481,6 +1481,7 @@ Store.saveActiveWorkout({
         <span class="plate-bar-label">Bar</span>
         <button class="bw-btn ${pc.bar === 45 ? 'active' : ''} ${typeClass}" onclick="FORGE.plateBar(45)">45 lb</button>
         <button class="bw-btn ${pc.bar === 35 ? 'active' : ''} ${typeClass}" onclick="FORGE.plateBar(35)">35 lb</button>
+        <button class="bw-btn ${pc.bar === 0 ? 'active' : ''} ${typeClass}" onclick="FORGE.plateBar(0)">No bar</button>
         <button class="bw-btn" style="color:var(--red);" onclick="FORGE.plateClear()">Clear</button>
       </div>
       <button class="save-set-btn ${typeClass}" style="margin-top:14px;" onclick="FORGE.plateApply()">USE ${total} ${state.weightUnit.toUpperCase()}</button>
