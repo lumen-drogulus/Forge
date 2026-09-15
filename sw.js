@@ -1,11 +1,12 @@
-const CACHE_NAME = 'forge-v1';
+const CACHE_NAME = 'forge-v1.1';
 const ASSETS = [
-  '/',
-  '/index.html',
-  '/css/styles.css',
-  '/js/data.js',
-  '/js/app.js',
-  '/manifest.json'
+  './',
+  './index.html',
+  './css/styles.css',
+  './js/data.js',
+  './js/app.js',
+  './manifest.json',
+  './logo.png'
 ];
 
 self.addEventListener('install', e => {
