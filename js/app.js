@@ -233,6 +233,16 @@ Store.saveActiveWorkout({
       closePlateCalc();
     });
     document.getElementById('settings-btn').addEventListener('click', () => renderTab('settings'));
+
+    // Enter on any number input closes the phone keyboard instead of forcing a
+    // swipe-back. Attached to #main-content rather than the inputs themselves
+    // because every render destroys and rebuilds them.
+    document.getElementById('main-content').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && e.target.tagName === 'INPUT') {
+        e.preventDefault();
+        e.target.blur();
+      }
+    });
   }
 
   function renderTab(tab) {
@@ -524,6 +534,18 @@ Store.saveActiveWorkout({
     `;
   }
 
+  // Converts a stored set back into the number you actually typed.
+  // BW+/BW- sets store TOTAL load (bodyweight +/- the added amount), but the
+  // input box expects only the added amount. Without this, set 2 prefills with
+  // the total and the number snowballs on every set after it.
+  function enteredOf(set, ex) {
+    if (!set || set.weight === undefined || set.weight === null) return '';
+    if (typeof set.entered === 'number') return set.entered;
+    if (ex.weightMode === 'bw-plus') return Math.max(0, set.weight - state.bodyWeight);
+    if (ex.weightMode === 'bw-minus') return Math.max(0, state.bodyWeight - set.weight);
+    return set.weight;
+  }
+
   function renderExercise(el) {
     const day = FORGE_DATA.cycleDays[state.cycleIndex];
     const workout = FORGE_DATA.workouts[day.id];
@@ -565,7 +587,11 @@ Store.saveActiveWorkout({
     const isBWMinus = ex.weightMode === 'bw-minus';
     const hasBWModes = isBW || isBWPlus || isBWMinus;
     const editingSet = state.editingSetIndex !== null ? log.sets[state.editingSetIndex] : null;
-    const lastWeight = editingSet ? editingSet.weight : (log.sets.length > 0 ? log.sets[log.sets.length - 1].weight : (prevData ? prevData.weight : ''));
+    const lastWeight = editingSet
+      ? enteredOf(editingSet, ex)
+      : (log.sets.length > 0
+          ? enteredOf(log.sets[log.sets.length - 1], ex)
+          : (prevData ? enteredOf({ weight: prevData.weight }, ex) : ''));
 
     // Build rep options (or seconds for time-tracked exercises)
     const isTimeMode = ex.trackMode === 'time';
@@ -668,7 +694,7 @@ Store.saveActiveWorkout({
             ` : `
               <div class="weight-input-wrap">
                 <button class="weight-adj" onclick="FORGE.adjWeight(-5)">-5</button>
-                <input type="number" class="weight-input ${typeClass}" id="weight-input" value="${lastWeight}" inputmode="numeric" placeholder="0">
+                <input type="number" class="weight-input ${typeClass}" id="weight-input" value="${lastWeight}" inputmode="numeric" enterkeyhint="done" placeholder="0">
                 <button class="weight-adj" onclick="FORGE.adjWeight(5)">+5</button>
               </div>
             `}
@@ -682,13 +708,13 @@ Store.saveActiveWorkout({
               </div>
               <div class="weight-input-wrap" style="margin-top:6px;">
                 <button class="weight-adj" onclick="FORGE.adjSeconds(-5)">-5</button>
-                <input type="number" class="weight-input ${typeClass}" id="seconds-input" value="${lastSeconds}" inputmode="numeric" placeholder="0">
+                <input type="number" class="weight-input ${typeClass}" id="seconds-input" value="${lastSeconds}" inputmode="numeric" enterkeyhint="done" placeholder="0">
                 <button class="weight-adj" onclick="FORGE.adjSeconds(5)">+5</button>
               </div>
             ` : `
               <div class="weight-input-wrap">
                 <button class="weight-adj" onclick="FORGE.adjReps(-1)">-1</button>
-                <input type="number" class="weight-input ${typeClass}" id="reps-input" value="${repsValue}" inputmode="numeric" placeholder="0">
+                <input type="number" class="weight-input ${typeClass}" id="reps-input" value="${repsValue}" inputmode="numeric" enterkeyhint="done" placeholder="0">
                 <button class="weight-adj" onclick="FORGE.adjReps(1)">+1</button>
               </div>
             `}
@@ -734,7 +760,7 @@ Store.saveActiveWorkout({
     const log = state.activeWorkoutLog.exercises[state.currentExerciseIndex];
     const isBW = ex.weightMode === 'bw';
 
-   let weight, reps, display;
+   let weight, reps, display, entered = null;
 
     if (ex.trackMode === 'time') {
       weight = state.bodyWeight;
@@ -746,17 +772,18 @@ Store.saveActiveWorkout({
       reps = document.getElementById('reps-input').value;
       display = `BW × ${reps}`;
     } else {
-      weight = parseFloat(document.getElementById('weight-input').value) || 0;
+      entered = parseFloat(document.getElementById('weight-input').value) || 0;
       reps = document.getElementById('reps-input').value;
+      weight = entered;
 
       if (ex.weightMode === 'bw-plus') {
-        display = `BW+${weight} × ${reps}`;
-        weight = state.bodyWeight + weight;
+        display = `BW+${entered} × ${reps}`;
+        weight = state.bodyWeight + entered;
       } else if (ex.weightMode === 'bw-minus') {
-        display = `BW-${weight} × ${reps}`;
-        weight = Math.max(0, state.bodyWeight - weight);
+        display = `BW-${entered} × ${reps}`;
+        weight = Math.max(0, state.bodyWeight - entered);
       } else {
-        display = `${weight} × ${reps}`;
+        display = `${entered} × ${reps}`;
       }
     }
 
@@ -764,6 +791,7 @@ Store.saveActiveWorkout({
 
     log.sets.push({
       weight: weight,
+      entered: entered,
       reps: repsNum,
       repsDisplay: reps,
       display: display,
@@ -810,7 +838,7 @@ Store.saveActiveWorkout({
     const idx = state.editingSetIndex;
     const isBW = ex.weightMode === 'bw';
 
-    let weight, reps, display;
+    let weight, reps, display, entered = null;
 
     if (ex.trackMode === 'time') {
       weight = state.bodyWeight;
@@ -822,16 +850,17 @@ Store.saveActiveWorkout({
       reps = document.getElementById('reps-input').value;
       display = `BW × ${reps}`;
     } else {
-      weight = parseFloat(document.getElementById('weight-input').value) || 0;
+      entered = parseFloat(document.getElementById('weight-input').value) || 0;
       reps = document.getElementById('reps-input').value;
+      weight = entered;
       if (ex.weightMode === 'bw-plus') {
-        display = `BW+${weight} × ${reps}`;
-        weight = state.bodyWeight + weight;
+        display = `BW+${entered} × ${reps}`;
+        weight = state.bodyWeight + entered;
       } else if (ex.weightMode === 'bw-minus') {
-        display = `BW-${weight} × ${reps}`;
-        weight = Math.max(0, state.bodyWeight - weight);
+        display = `BW-${entered} × ${reps}`;
+        weight = Math.max(0, state.bodyWeight - entered);
       } else {
-        display = `${weight} × ${reps}`;
+        display = `${entered} × ${reps}`;
       }
     }
 
@@ -839,6 +868,7 @@ Store.saveActiveWorkout({
 
     log.sets[idx] = {
       weight: weight,
+      entered: entered,
       reps: repsNum,
       repsDisplay: reps,
       display: display,
