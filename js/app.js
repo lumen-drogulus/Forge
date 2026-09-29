@@ -420,6 +420,47 @@ Store.saveActiveWorkout({
   }
 
   // ===== NAVIGATION =====
+  // ===== PANELS & THE BACK GESTURE =====
+  // Installed as a PWA there is no browser chrome, so a back-swipe with nothing
+  // on the history stack closes the app outright. Opening a panel pushes one
+  // history entry; the gesture pops that instead and simply dismisses the sheet.
+  // Every close routes through history.back() so the two paths cannot disagree.
+  let panelPushed = false;
+
+  function showPanel(panelId) {
+    document.getElementById(panelId).classList.add('open');
+    document.getElementById('info-backdrop').classList.add('open');
+    if (!panelPushed) {
+      panelPushed = true;
+      try { history.pushState({ forgePanel: true }, ''); } catch (e) {}
+    }
+  }
+
+  function hidePanels() {
+    const info = document.getElementById('info-panel');
+    const plate = document.getElementById('plate-panel');
+    if (info) info.classList.remove('open');
+    if (plate) plate.classList.remove('open');
+    const bd = document.getElementById('info-backdrop');
+    if (bd) bd.classList.remove('open');
+    state._sheetDate = null;
+  }
+
+  function dismissPanel() {
+    if (panelPushed) {
+      history.back();          // popstate below does the hiding
+    } else {
+      hidePanels();
+    }
+  }
+
+  window.addEventListener('popstate', function() {
+    if (panelPushed) {
+      panelPushed = false;
+      hidePanels();
+    }
+  });
+
   function setupNavigation() {
     document.querySelectorAll('.nav-item').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -427,8 +468,7 @@ Store.saveActiveWorkout({
       });
     });
     document.getElementById('info-backdrop').addEventListener('click', () => {
-      closeInfoPanel();
-      closePlateCalc();
+      dismissPanel();
     });
     document.getElementById('settings-btn').addEventListener('click', () => renderTab('settings'));
 
@@ -569,8 +609,7 @@ Store.saveActiveWorkout({
         Either way the toggle beside the picker overrides it before you start.
       </div>
     `;
-    document.getElementById('info-panel').classList.add('open');
-    document.getElementById('info-backdrop').classList.add('open');
+    showPanel('info-panel');
   }
 
   const SIZE_META = {
@@ -769,8 +808,7 @@ Store.saveActiveWorkout({
         Faded codes on future days are the projected schedule, not something you did.
       </div>
     `;
-    document.getElementById('info-panel').classList.add('open');
-    document.getElementById('info-backdrop').classList.add('open');
+    showPanel('info-panel');
   }
 
   // ===== CALENDAR DAY SHEET =====
@@ -822,18 +860,16 @@ Store.saveActiveWorkout({
       <div class="sheet-add-grid">${options}</div>
       <div class="sheet-note">Manually added workouts count toward your cycle position. Rest days do not.</div>
     `;
-    document.getElementById('info-panel').classList.add('open');
-    document.getElementById('info-backdrop').classList.add('open');
+    showPanel('info-panel');
   }
 
   function closeDaySheet() {
-    document.getElementById('info-panel').classList.remove('open');
-    document.getElementById('info-backdrop').classList.remove('open');
-    state._sheetDate = null;
+    dismissPanel();
   }
 
-  function markDay(dayId) {
-    const dateStr = state._sheetDate;
+  // Writes the entry. Kept separate from the sheet UI so "Log rest day" on
+  // the home screen doesn't have to open and immediately close a panel.
+  function addDayEntry(dateStr, dayId) {
     if (!dateStr) return;
     const isRest = dayId === 'rest';
     const d = isRest ? null : dayById(dayId);
@@ -863,6 +899,12 @@ Store.saveActiveWorkout({
 
     refreshCycle();
     state._calendarNavActive = true;
+  }
+
+  function markDay(dayId) {
+    const dateStr = state._sheetDate;
+    if (!dateStr) return;
+    addDayEntry(dateStr, dayId);
     openDaySheet(dateStr);
     renderHome(document.getElementById('main-content'));
   }
@@ -891,9 +933,8 @@ Store.saveActiveWorkout({
   }
 
   function logRestToday() {
-    state._sheetDate = todayLocal();
-    markDay('rest');
-    closeDaySheet();
+    addDayEntry(todayLocal(), 'rest');
+    renderHome(document.getElementById('main-content'));
   }
 
   function calendarPrev() {
@@ -2064,14 +2105,11 @@ Store.saveActiveWorkout({
 
   function openPlateCalc() {
     renderPlateCalc();
-    document.getElementById('plate-panel').classList.add('open');
-    document.getElementById('info-backdrop').classList.add('open');
+    showPanel('plate-panel');
   }
 
   function closePlateCalc() {
-    const panel = document.getElementById('plate-panel');
-    if (panel) panel.classList.remove('open');
-    document.getElementById('info-backdrop').classList.remove('open');
+    dismissPanel();
   }
 
   function renderPlateCalc() {
@@ -2156,14 +2194,11 @@ Store.saveActiveWorkout({
       </button>
     `;
 
-    panel.classList.add('open');
-    backdrop.classList.add('open');
+    showPanel('info-panel');
   }
 
   function closeInfoPanel() {
-    document.getElementById('info-panel').classList.remove('open');
-    document.getElementById('info-backdrop').classList.remove('open');
-    state._sheetDate = null;   // the day sheet shares this panel
+    dismissPanel();
   }
 
   // ===== TRACKER TAB =====
