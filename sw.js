@@ -1,4 +1,9 @@
-const CACHE_NAME = 'forge-v1.1';
+// FORGE service worker
+// Bump CACHE_VERSION on every deploy. The activate handler deletes every
+// cache that doesn't match, which is what forces a clean slate.
+const CACHE_VERSION = 'v2';
+const CACHE_NAME = 'forge-' + CACHE_VERSION;
+
 const ASSETS = [
   './',
   './index.html',
@@ -8,6 +13,13 @@ const ASSETS = [
   './manifest.json',
   './logo.png'
 ];
+
+// App code must be fresh when the network is up. Everything else (images,
+// fonts, CDN icons) can come straight from cache.
+function isAppCode(url) {
+  return url.origin === self.location.origin &&
+         /\.(html|js|css|json)$/.test(url.pathname);
+}
 
 self.addEventListener('install', e => {
   e.waitUntil(
@@ -20,12 +32,38 @@ self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys().then(keys =>
       Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
-    )
+    ).then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
 self.addEventListener('fetch', e => {
+  if (e.request.method !== 'GET') return;
+
+  const url = new URL(e.request.url);
+  const navigating = e.request.mode === 'navigate';
+
+  if (navigating || isAppCode(url)) {
+    // NETWORK FIRST. Online, you always get the deployed version. Offline,
+    // you fall back to the last copy that worked. No more one-load lag.
+    e.respondWith(
+      fetch(e.request)
+        .then(response => {
+          if (response && response.status === 200) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then(cache => cache.put(e.request, clone));
+          }
+          return response;
+        })
+        .catch(() =>
+          caches.match(e.request).then(cached =>
+            cached || caches.match('./index.html')
+          )
+        )
+    );
+    return;
+  }
+
+  // CACHE FIRST for static assets, refreshed quietly in the background.
   e.respondWith(
     caches.match(e.request).then(cached => {
       const fetchPromise = fetch(e.request).then(response => {
@@ -38,4 +76,10 @@ self.addEventListener('fetch', e => {
       return cached || fetchPromise;
     })
   );
+});
+
+// Lets the page force an update without a reinstall: FORGE can post
+// {type:'SKIP_WAITING'} to take the new worker immediately.
+self.addEventListener('message', e => {
+  if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
