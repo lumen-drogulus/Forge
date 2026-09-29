@@ -1358,3 +1358,50 @@ button { font: inherit; color: inherit; }
   color: var(--text-muted);
 }
 
+
+/* ===== SANDBOX =====
+   Hazard tape under the header and a pill that doubles as the exit. No day
+   colour on purpose: those mean something, and this isn't a workout. */
+.header { position: relative; }
+body.sandbox .header::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: -4px;
+  height: 3px;
+  background: repeating-linear-gradient(-45deg, var(--text-primary) 0 5px, transparent 5px 10px);
+  opacity: 0.55;
+  pointer-events: none;
+}
+body.sandbox .header-date { display: none; }
+.header-brand { cursor: default; user-select: none; -webkit-user-select: none; }
+.sandbox-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 4px 0 10px;
+  background: var(--bg-elevated);
+  border: 1px dashed var(--border-light);
+  border-radius: var(--radius);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.sandbox-pill .ti { font-size: 13px; }
+.sandbox-x {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 20px;
+  padding: 0 7px;
+  margin-left: 4px;
+  background: var(--text-primary);
+  color: var(--bg-primary);
+  border-radius: var(--radius);
+  font-weight: 700;
+}
+.sandbox-card { border-style: dashed; }
+.sandbox-card .action-btn { margin-top: 10px; }
