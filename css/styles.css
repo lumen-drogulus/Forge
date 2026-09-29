@@ -1,6 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
 :root {
+  --violet: #8B5CF6;
   --bg-primary: #0D0D0D;
   --bg-surface: #1A1A1A;
   --bg-card: #242424;
@@ -315,6 +316,98 @@ html, body {
   margin-top: 14px;
   line-height: 1.5;
 }
+
+/* ===== Day picker + counts-as toggle ===== */
+.day-picker-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+}
+.day-picker-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.day-picker-btn.power { border-color: rgba(245, 158, 11, 0.35); }
+.day-picker-btn.hypertrophy { border-color: rgba(6, 182, 212, 0.35); }
+.day-picker-btn.calisthenics { border-color: rgba(16, 185, 129, 0.35); }
+.day-picker-btn .dp-code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: rgba(255,255,255,0.07);
+}
+.day-picker-btn .dp-name { flex: 1; text-align: left; font-weight: 600; }
+.counts-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.counts-toggle.on {
+  border-style: solid;
+  border-color: rgba(16, 185, 129, 0.45);
+  color: var(--green, #10B981);
+}
+
+.pick-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.pick-row.selected { border-color: var(--amber); }
+.pick-row .cal-code { font-size: 11px; min-width: 30px; text-align: center; padding: 3px 4px; }
+.pick-body { display: flex; flex-direction: column; flex: 1; gap: 2px; }
+.pick-name { font-size: 14px; font-weight: 600; }
+.pick-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* calisthenics + back-core tones, shared by calendar, key and picker */
+.cal-code.cal  { color: var(--green, #10B981);  background: rgba(16, 185, 129, 0.14); }
+.cal-code.core { color: var(--violet); background: rgba(139, 92, 246, 0.16); }
+.pick-row.core  { border-color: rgba(139, 92, 246, 0.35); }
+.sheet-add.core { border-color: rgba(139, 92, 246, 0.35); color: var(--violet); }
+.pick-row.cal  { border-color: rgba(16, 185, 129, 0.3); }
+.sheet-add.cal { border-color: rgba(16, 185, 129, 0.35); color: var(--green, #10B981); }
+.size-btn.active.calisthenics { border-color: var(--green, #10B981); color: var(--green, #10B981); }
+.today-card.calisthenics { border-color: rgba(16, 185, 129, 0.35); }
+.today-label.calisthenics, .text-green { color: var(--green, #10B981); }
+.primer-tag.calisthenics { background: rgba(16, 185, 129, 0.18); color: var(--green, #10B981); }
+.finisher-tag.calisthenics { background: rgba(16, 185, 129, 0.18); color: var(--green, #10B981); }
 
 /* ===== Workout size picker ===== */
 .size-picker {
