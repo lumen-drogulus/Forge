@@ -20,6 +20,7 @@
     timerEndAt: 0,
     timerRunning: false,
     bodyWeight: 180,         // default, configurable in settings
+    workoutSize: 'normal',   // light | normal | extended -> which tiers load
     sheetsUrl: '',           // Google Sheets webhook URL
     weightUnit: 'lbs',
     workoutStartTime: null,
@@ -48,6 +49,7 @@
     getSettings() {
       return this.get('settings') || {
         bodyWeight: 180,
+        workoutSize: 'normal',
         weightUnit: 'lbs',
         sheetsUrl: '',
         cycleStartDate: new Date().toISOString().split('T')[0]
@@ -93,6 +95,45 @@
   const SIZE_SUFFIX = { light: '\u2212', normal: '\u2731', extended: '+' };
 
   function cycleLen() { return FORGE_DATA.cycleDays.length; }
+
+  // ===== WORKOUT SIZE =====
+  // Every exercise carries tier 1, 2 or 3 and the sizes are cumulative:
+  // light = tier 1, normal = 1+2, extended = everything. One list per day,
+  // three views of it, so nothing is authored twice.
+  const SIZE_TIERS = { light: 1, normal: 2, extended: 3 };
+  const SIZE_ORDER = ['light', 'normal', 'extended'];
+
+  function exercisesFor(workout, size) {
+    if (!workout || !workout.exercises) return [];
+    const max = SIZE_TIERS[size] || 2;
+    const filtered = workout.exercises.filter(ex => (ex.tier || 1) <= max);
+    return filtered.length ? filtered : workout.exercises;   // never serve an empty day
+  }
+
+  function minutesFor(workout, size) {
+    if (workout && workout.minutesBySize && workout.minutesBySize[size]) {
+      return workout.minutesBySize[size];
+    }
+    return workout ? workout.estimatedMinutes : 0;
+  }
+
+  // The exercise list the ACTIVE session is running. Locked in at start, so
+  // changing size mid-workout can't renumber the exercises under you.
+  function activeExercises() {
+    const day = activeDay();
+    const workout = FORGE_DATA.workouts[day.id];
+    const size = (state.activeWorkoutLog && state.activeWorkoutLog.size) || state.workoutSize;
+    return exercisesFor(workout, size);
+  }
+
+  function setWorkoutSize(size) {
+    if (!SIZE_TIERS[size]) return;
+    state.workoutSize = size;
+    const settings = Store.getSettings();
+    settings.workoutSize = size;
+    Store.saveSettings(settings);
+    renderHome(document.getElementById('main-content'));
+  }
 
   function dayById(id) {
     return FORGE_DATA.cycleDays.find(d => d.id === id)
@@ -220,6 +261,7 @@
   function init() {
     var settings = Store.getSettings();
     state.bodyWeight = settings.bodyWeight || 180;
+    state.workoutSize = settings.workoutSize || 'normal';
     state.weightUnit = settings.weightUnit || 'lbs';
     state.sheetsUrl = settings.sheetsUrl || FORGE_DATA.sheetsWebhookUrl || '';
 
@@ -393,13 +435,38 @@ Store.saveActiveWorkout({
           <div>
             <div class="today-label ${typeClass}">${todayEntries.length ? 'Next up' : 'Today'}</div>
             <div class="today-name">${day.name}</div>
-            <div class="today-meta">${day.label} · ${workout.exercises.length} exercises · ~${workout.estimatedMinutes} min</div>
+            <div class="today-meta">${day.label} · ${exercisesFor(workout, state.workoutSize).length} exercises · ~${minutesFor(workout, state.workoutSize)} min</div>
           </div>
           <div class="today-day-badge">${codeFor(day.id)}</div>
         </div>
         ${doneLine}
       </div>
+      ${renderSizePicker(workout, typeClass)}
       ${buildActionArea(typeClass)}
+    `;
+  }
+
+  const SIZE_META = {
+    light:    { mark: '\u2212', label: 'Light' },
+    normal:   { mark: '\u2731', label: 'Normal' },
+    extended: { mark: '+',      label: 'Extended' }
+  };
+
+  function renderSizePicker(workout, typeClass) {
+    if (state.workoutActive) return '';   // size is locked once you start
+    return `
+      <div class="size-picker">
+        ${SIZE_ORDER.map(sz => {
+          const m = SIZE_META[sz];
+          const on = state.workoutSize === sz;
+          return `
+            <button class="size-btn ${on ? 'active ' + typeClass : ''}" onclick="FORGE.setWorkoutSize('${sz}')">
+              <span class="size-mark">${m.mark}</span>
+              <span class="size-label">${m.label}</span>
+              <span class="size-detail">${exercisesFor(workout, sz).length} ex \u00b7 ~${minutesFor(workout, sz)}m</span>
+            </button>`;
+        }).join('')}
+      </div>
     `;
   }
 
@@ -717,12 +784,13 @@ Store.saveActiveWorkout({
     state.currentSetIndex = 0;
     state.skippedExercises = [];
     state.workoutStartTime = Date.now(); // start the duration clock
+    const plan = exercisesFor(workout, state.workoutSize);
     state.activeWorkoutLog = {
       dayId: day.id,
-      slotId: day.id,        // which cycle slot this counts as; null = bonus
-      size: 'normal',        // light | normal | extended (Phase 4)
+      slotId: day.id,            // which cycle slot this counts as; null = bonus
+      size: state.workoutSize,   // locked in here; the calendar code reads it
       date: new Date().toISOString(),
-      exercises: workout.exercises.map(ex => ({
+      exercises: plan.map(ex => ({
         id: ex.id,
         name: ex.name,
         sets: [],
@@ -759,7 +827,7 @@ Store.saveActiveWorkout({
       </div>
     `;
 
-    workout.exercises.forEach((ex, i) => {
+    activeExercises().forEach((ex, i) => {
       const log = state.activeWorkoutLog.exercises[i];
       const done = log.completed;
       const skipped = state.skippedExercises.includes(i);
@@ -770,7 +838,7 @@ Store.saveActiveWorkout({
         <div class="${itemCls}" onclick="FORGE.goToExercise(${i})">
           <div class="${numCls}">${done ? '<i class="ti ti-check" style="font-size:12px"></i>' : i + 1}</div>
           <div class="wo-item-info">
-            <div class="wo-item-name">${ex.name}${ex.isFinisher ? `<span class="finisher-tag ${typeClass}">Finisher</span>` : ''}</div>
+            <div class="wo-item-name">${ex.name}${ex.isFinisher ? `<span class="finisher-tag ${typeClass}">Finisher</span>` : ex.isPrimer ? `<span class="primer-tag ${typeClass}">Primer</span>` : ''}</div>
             <div class="wo-item-detail">${ex.sets} sets · ${ex.reps} reps · ${ex.restLabel}</div>
           </div>
           <div class="wo-item-status"><i class="ti ti-chevron-right"></i></div>
@@ -828,10 +896,11 @@ Store.saveActiveWorkout({
   function renderExercise(el) {
     const day = activeDay();
     const workout = FORGE_DATA.workouts[day.id];
-    const ex = workout.exercises[state.currentExerciseIndex];
+    const plan = activeExercises();
+    const ex = plan[state.currentExerciseIndex];
     const log = state.activeWorkoutLog.exercises[state.currentExerciseIndex];
     const typeClass = day.type === 'hypertrophy' ? 'hypertrophy' : 'power';
-    const totalExercises = workout.exercises.length;
+    const totalExercises = plan.length;
 
     // Get previous data for this exercise
     const prevData = getPreviousExerciseData(ex.id, day.id);
@@ -1013,7 +1082,7 @@ Store.saveActiveWorkout({
 
         ${(() => {
           const nextIdx = state.currentExerciseIndex + 1;
-          const nextEx = nextIdx < workout.exercises.length ? workout.exercises[nextIdx] : null;
+          const nextEx = nextIdx < activeExercises().length ? activeExercises()[nextIdx] : null;
           return nextEx && state.editingSetIndex === null ? `
             <div class="up-next-preview">
               <span class="up-next-label">Up next</span>
@@ -1035,7 +1104,7 @@ Store.saveActiveWorkout({
   function saveSet() {
     const day = activeDay();
     const workout = FORGE_DATA.workouts[day.id];
-    const ex = workout.exercises[state.currentExerciseIndex];
+    const ex = activeExercises()[state.currentExerciseIndex];
     const log = state.activeWorkoutLog.exercises[state.currentExerciseIndex];
     const isBW = ex.weightMode === 'bw';
 
@@ -1112,7 +1181,7 @@ Store.saveActiveWorkout({
   function updateSet() {
     const day = activeDay();
     const workout = FORGE_DATA.workouts[day.id];
-    const ex = workout.exercises[state.currentExerciseIndex];
+    const ex = activeExercises()[state.currentExerciseIndex];
     const log = state.activeWorkoutLog.exercises[state.currentExerciseIndex];
     const idx = state.editingSetIndex;
     const isBW = ex.weightMode === 'bw';
@@ -1654,7 +1723,7 @@ Store.saveActiveWorkout({
   function setBWMode(mode) {
     const day = activeDay();
     const workout = FORGE_DATA.workouts[day.id];
-    const ex = workout.exercises[state.currentExerciseIndex];
+    const ex = activeExercises()[state.currentExerciseIndex];
     ex.weightMode = mode;
     renderExercise(document.getElementById('main-content'));
   }
@@ -1824,7 +1893,7 @@ Store.saveActiveWorkout({
   function showInfo() {
     const day = activeDay();
     const workout = FORGE_DATA.workouts[day.id];
-    const ex = workout.exercises[state.currentExerciseIndex];
+    const ex = activeExercises()[state.currentExerciseIndex];
 
     const panel = document.getElementById('info-panel');
     const content = document.getElementById('info-panel-content');
@@ -1834,7 +1903,7 @@ Store.saveActiveWorkout({
       <div class="info-panel-title">${ex.name}</div>
       <img class="info-panel-image" src="${ex.image}" alt="${ex.name}" onerror="this.style.display='none'">
       <div class="info-panel-tip">${ex.tip}</div>
-      ${ex.isFinisher ? `<div style="font-size:12px;color:var(--amber);margin-bottom:12px;">🔥 ${ex.finisherProgression}</div>` : ''}
+      ${(ex.isFinisher || ex.isPrimer) && ex.finisherProgression ? `<div style="font-size:12px;color:var(--amber);margin-bottom:12px;">${ex.isPrimer ? '\u26a1' : '\ud83d\udd25'} ${ex.finisherProgression}</div>` : ''}
       <button class="info-panel-video-btn" onclick="window.open('${ex.video}', '_blank')">
         <i class="ti ti-player-play"></i> Watch demo video
       </button>
@@ -2157,6 +2226,7 @@ Store.saveActiveWorkout({
     openDaySheet,
     closeDaySheet,
     openKeySheet,
+    setWorkoutSize,
     markDay,
     clearDayEntry,
     calendarPrev,

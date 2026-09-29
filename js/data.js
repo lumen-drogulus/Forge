@@ -51,7 +51,8 @@ const FORGE_DATA = {
       type: "power",
       label: "Power",
       goal: "Strength — heavy compounds, low reps, long rest",
-      estimatedMinutes: 55,
+      estimatedMinutes: 62,
+      minutesBySize: { light: 30, normal: 62, extended: 88 },
       warmup: {
         name: "Dynamic Warm-Up",
         duration: "5 minutes",
@@ -64,8 +65,26 @@ const FORGE_DATA = {
       },
       exercises: [
         {
+          id: "explosive-pushup",
+          name: "Explosive Push-Ups",
+          tier: 2,
+          sets: 2,
+          reps: "to failure",
+          rpe: "-",
+          rest: 45,
+          restLabel: "45 sec",
+          weightMode: "bw",
+          image: "explosive-pushup.png",
+          video: "https://www.youtube.com/watch?v=bCBFRCKjJME",
+          tip: "Standard push-ups with maximum speed on the concentric. If you can clap, clap. If not, just press as explosively as possible. Power intent, not grinding reps.",
+          isFinisher: false,
+          isPrimer: true,
+          finisherProgression: "Building toward handstand push-ups. Explosive push-ups develop pressing power."
+        },
+        {
           id: "bb-flat-bench",
           name: "Barbell Flat Bench Press",
+          tier: 1,
           sets: 4,
           reps: "5",
           rpe: "7-8",
@@ -80,6 +99,7 @@ const FORGE_DATA = {
         {
           id: "bb-overhead-press",
           name: "Standing Barbell OHP",
+          tier: 1,
           sets: 4,
           reps: "5",
           rpe: "7-8",
@@ -92,8 +112,24 @@ const FORGE_DATA = {
           isFinisher: false
         },
         {
+          id: "incline-bb-press",
+          name: "Incline Barbell Press",
+          sets: 3,
+          reps: "6-8",
+          rpe: "8",
+          rest: 60,
+          restLabel: "60 sec",
+          weightMode: "free",
+          tier: 3,
+          image: "incline-bb-press.png",
+          video: "https://www.youtube.com/results?search_query=incline+barbell+bench+press+form",
+          tip: "Bench at 30 degrees, not 45. Higher than that and it becomes a shoulder press with extra steps. Same setup as flat bench: shoulder blades pinned, feet planted, bar to the upper chest just below the collarbone.",
+          isFinisher: false
+        },
+        {
           id: "weighted-dips-a",
           name: "Weighted Dips",
+          tier: 2,
           sets: 3,
           reps: "6-8",
           rpe: "8",
@@ -108,6 +144,7 @@ const FORGE_DATA = {
         {
           id: "cg-bench-press",
           name: "Close-Grip Bench Press",
+          tier: 2,
           sets: 3,
           reps: "8",
           rpe: "8",
@@ -120,19 +157,49 @@ const FORGE_DATA = {
           isFinisher: false
         },
         {
-          id: "explosive-pushup",
-          name: "Explosive Push-Ups",
-          sets: 2,
-          reps: "to failure",
-          rpe: "-",
+          id: "back-extension",
+          name: "Back Extension",
+          sets: 3,
+          reps: "12-15",
+          rpe: "7-8",
           rest: 45,
           restLabel: "45 sec",
+          weightMode: "free",
+          tier: 1,
+          image: "back-extension.png",
+          video: "https://www.youtube.com/results?search_query=45+degree+back+extension+proper+form",
+          tip: "Log 0 until bodyweight is easy for 3 sets of 15, then hold a plate to the chest. Hinge at the hips, not the spine. Rise until the body is a straight line and STOP. Hyperextending past that is how you turn a prehab exercise into the thing that hurt you.",
+          isFinisher: false
+        },
+        {
+          id: "cable-crunch",
+          name: "Cable Crunch",
+          sets: 3,
+          reps: "15",
+          rpe: "8-9",
+          rest: 45,
+          restLabel: "45 sec",
+          weightMode: "free",
+          tier: 3,
+          image: "cable-crunch.png",
+          video: "https://www.youtube.com/results?search_query=cable+crunch+proper+form+abs",
+          tip: "Kneel facing the stack, rope beside the ears, hips locked in place. Curl the ribcage toward the pelvis. The hips must not move. If you are bowing at the hips it is a lat pulldown for your abs and does nothing.",
+          isFinisher: false
+        },
+        {
+          id: "neck-isometrics",
+          name: "Neck Isometrics",
+          sets: 2,
+          reps: "4 dir x 10s",
+          rpe: "-",
+          rest: 30,
+          restLabel: "30 sec",
           weightMode: "bw",
-          image: "explosive-pushup.png",
-          video: "https://www.youtube.com/watch?v=bCBFRCKjJME",
-          tip: "Standard push-ups with maximum speed on the concentric. If you can clap, clap. If not, just press as explosively as possible. Power intent, not grinding reps.",
-          isFinisher: true,
-          finisherProgression: "Building toward handstand push-ups. Explosive push-ups develop pressing power."
+          tier: 1,
+          image: "neck-isometrics.png",
+          video: "https://www.youtube.com/results?search_query=neck+isometric+exercises+for+neck+pain",
+          tip: "Palm on the forehead, push the head into it without the head actually moving. Hold 10 seconds. Repeat on the back of the head, then each side. That is one set. No load, no motion, no momentum. This builds tolerance before any weight goes near the neck.",
+          isFinisher: false
         }
       ]
     },
@@ -146,7 +213,8 @@ const FORGE_DATA = {
       type: "power",
       label: "Power",
       goal: "Strength — heavy compounds, low reps, long rest",
-      estimatedMinutes: 50,
+      estimatedMinutes: 60,
+      minutesBySize: { light: 30, normal: 60, extended: 85 },
       warmup: {
         name: "Dynamic Warm-Up",
         duration: "5 minutes",
@@ -161,6 +229,7 @@ const FORGE_DATA = {
         {
           id: "bb-bent-row",
           name: "Barbell Bent-Over Row",
+          tier: 1,
           sets: 4,
           reps: "5",
           rpe: "7-8",
@@ -175,6 +244,7 @@ const FORGE_DATA = {
         {
           id: "weighted-pullup",
           name: "Weighted Pull-Ups",
+          tier: 1,
           sets: 4,
           reps: "5-6",
           rpe: "8",
@@ -187,8 +257,24 @@ const FORGE_DATA = {
           isFinisher: false
         },
         {
+          id: "chest-supported-row",
+          name: "Chest-Supported Row",
+          sets: 3,
+          reps: "10",
+          rpe: "8",
+          rest: 60,
+          restLabel: "60 sec",
+          weightMode: "free",
+          tier: 2,
+          image: "chest-supported-row.png",
+          video: "https://www.youtube.com/results?search_query=chest+supported+row+form",
+          tip: "Chest pinned to the pad, which takes the lower back out entirely. That is the point: all the pulling volume, none of the spinal load you already paid for on bent-over rows. Pull to the lower ribs, squeeze, control back.",
+          isFinisher: false
+        },
+        {
           id: "bb-shrugs",
           name: "Barbell Shrugs",
+          tier: 1,
           sets: 3,
           reps: "8",
           rpe: "8",
@@ -203,6 +289,7 @@ const FORGE_DATA = {
         {
           id: "bb-curls",
           name: "Barbell Curls",
+          tier: 2,
           sets: 3,
           reps: "8",
           rpe: "8",
@@ -215,8 +302,54 @@ const FORGE_DATA = {
           isFinisher: false
         },
         {
+          id: "preacher-curl",
+          name: "Preacher Curl",
+          sets: 3,
+          reps: "10-12",
+          rpe: "9",
+          rest: 45,
+          restLabel: "45 sec",
+          weightMode: "free",
+          tier: 3,
+          image: "preacher-curl.png",
+          video: "https://www.youtube.com/results?search_query=preacher+curl+proper+form",
+          tip: "Armpits into the top of the pad. Do not let the elbows drift down the slope. Full extension at the bottom, which is the whole reason to use this over standing curls, so resist the urge to cut the range short.",
+          isFinisher: false
+        },
+        {
+          id: "hanging-leg-raise",
+          name: "Hanging Leg Raise",
+          sets: 3,
+          reps: "10-12",
+          rpe: "8",
+          rest: 45,
+          restLabel: "45 sec",
+          weightMode: "bw",
+          tier: 3,
+          image: "hanging-leg-raise.png",
+          video: "https://www.youtube.com/results?search_query=hanging+leg+raise+proper+form",
+          tip: "Start with knees tucked if straight legs make you swing. The goal is curling the pelvis up at the top, not just lifting the legs. No swinging. If you are using momentum, drop to bent knees and rebuild it.",
+          isFinisher: false
+        },
+        {
+          id: "neck-isometrics",
+          name: "Neck Isometrics",
+          sets: 2,
+          reps: "4 dir x 10s",
+          rpe: "-",
+          rest: 30,
+          restLabel: "30 sec",
+          weightMode: "bw",
+          tier: 1,
+          image: "neck-isometrics.png",
+          video: "https://www.youtube.com/results?search_query=neck+isometric+exercises+for+neck+pain",
+          tip: "Palm on the forehead, push the head into it without the head actually moving. Hold 10 seconds. Repeat on the back of the head, then each side. That is one set. No load, no motion, no momentum. This builds tolerance before any weight goes near the neck.",
+          isFinisher: false
+        },
+        {
           id: "dead-hang",
           name: "Dead Hangs",
+          tier: 2,
           sets: 2,
           reps: "max time",
           rpe: "-",
@@ -242,7 +375,8 @@ const FORGE_DATA = {
       type: "power",
       label: "Power",
       goal: "Strength — heavy compounds, low reps, long rest",
-      estimatedMinutes: 55,
+      estimatedMinutes: 58,
+      minutesBySize: { light: 30, normal: 58, extended: 82 },
       warmup: {
         name: "Dynamic Warm-Up",
         duration: "5 minutes",
@@ -256,8 +390,25 @@ const FORGE_DATA = {
       },
       exercises: [
         {
+          id: "kb-swings",
+          name: "Kettlebell Swings",
+          sets: 3,
+          reps: "15",
+          rpe: "7",
+          rest: 45,
+          restLabel: "45 sec",
+          weightMode: "free",
+          tier: 2,
+          image: "kb-swings.png",
+          video: "https://www.youtube.com/results?search_query=kettlebell+swing+hip+hinge+tutorial",
+          tip: "Hip hinge, not a squat. The bell is thrown forward by the hips snapping, arms are just rope. Bell floats to chest height, no higher. Done right you will feel this in the glutes and hamstrings, which is exactly what you want awake before heavy squats.",
+          isFinisher: false,
+          isPrimer: true
+        },
+        {
           id: "bb-back-squat",
           name: "Barbell Back Squat",
+          tier: 1,
           sets: 4,
           reps: "5",
           rpe: "7-8",
@@ -272,6 +423,7 @@ const FORGE_DATA = {
         {
           id: "romanian-deadlift",
           name: "Romanian Deadlift",
+          tier: 1,
           sets: 4,
           reps: "5",
           rpe: "7-8",
@@ -286,6 +438,7 @@ const FORGE_DATA = {
         {
           id: "leg-press",
           name: "Leg Press",
+          tier: 2,
           sets: 3,
           reps: "8",
           rpe: "8",
@@ -300,6 +453,7 @@ const FORGE_DATA = {
         {
           id: "standing-calf-raise",
           name: "Weighted Standing Calf Raises",
+          tier: 1,
           sets: 4,
           reps: "10",
           rpe: "8",
@@ -312,19 +466,49 @@ const FORGE_DATA = {
           isFinisher: false
         },
         {
-          id: "box-jumps",
-          name: "Box Jumps",
+          id: "hanging-leg-raise",
+          name: "Hanging Leg Raise",
           sets: 3,
-          reps: "6-8",
-          rpe: "-",
+          reps: "10-12",
+          rpe: "8",
           rest: 45,
           restLabel: "45 sec",
           weightMode: "bw",
-          image: "box-jump.png",
-          video: "https://www.youtube.com/watch?v=NBY9-kTuHEk",
-          tip: "Focus on explosive hip extension and soft landings. Step down between reps rather than rebounding. Progress the height over weeks, not the reps. This is power output, not conditioning.",
-          isFinisher: true,
-          finisherProgression: "Building toward full unassisted pistol squats. Box jumps develop explosive hip and quad power."
+          tier: 2,
+          image: "hanging-leg-raise.png",
+          video: "https://www.youtube.com/results?search_query=hanging+leg+raise+proper+form",
+          tip: "Start with knees tucked if straight legs make you swing. The goal is curling the pelvis up at the top, not just lifting the legs. No swinging. If you are using momentum, drop to bent knees and rebuild it.",
+          isFinisher: false
+        },
+        {
+          id: "farmer-carry",
+          name: "Farmer Carry",
+          sets: 3,
+          reps: "40 yd",
+          rpe: "8",
+          rest: 60,
+          restLabel: "60 sec",
+          weightMode: "free",
+          tier: 3,
+          image: "farmer-carry.png",
+          video: "https://www.youtube.com/results?search_query=farmer+carry+proper+form",
+          tip: "Log the weight in ONE hand. Heavy dumbbells or handles, ribs down, shoulders back, walk tall and controlled. Grip usually quits first, which is the training effect. Nothing after this needs your grip, so empty the tank.",
+          isFinisher: false
+        },
+        {
+          id: "cable-crunch",
+          name: "Cable Crunch",
+          sets: 3,
+          reps: "15",
+          rpe: "8-9",
+          rest: 45,
+          restLabel: "45 sec",
+          weightMode: "free",
+          tier: 3,
+          image: "cable-crunch.png",
+          video: "https://www.youtube.com/results?search_query=cable+crunch+proper+form+abs",
+          tip: "Kneel facing the stack, rope beside the ears, hips locked in place. Curl the ribcage toward the pelvis. The hips must not move. If you are bowing at the hips it is a lat pulldown for your abs and does nothing.",
+          isFinisher: false
         }
       ]
     },
@@ -338,7 +522,8 @@ const FORGE_DATA = {
       type: "hypertrophy",
       label: "Hypertrophy",
       goal: "Volume — moderate loads, higher reps, controlled tempos",
-      estimatedMinutes: 55,
+      estimatedMinutes: 58,
+      minutesBySize: { light: 30, normal: 58, extended: 84 },
       warmup: {
         name: "Dynamic Warm-Up",
         duration: "5 minutes",
@@ -351,8 +536,26 @@ const FORGE_DATA = {
       },
       exercises: [
         {
+          id: "pike-pushup",
+          name: "Pike Push-Ups",
+          tier: 2,
+          sets: 2,
+          reps: "to failure",
+          rpe: "-",
+          rest: 45,
+          restLabel: "45 sec",
+          weightMode: "bw",
+          image: "pike-pushup.png",
+          video: "https://www.youtube.com/watch?v=sposDXWEB0A",
+          tip: "Hips high, head between the arms, pressing vertically. Entry point toward handstand push-ups. If too hard, elevate feet on a bench to reduce load. Track rep counts. When hitting 15+ on both sets, elevate feet higher.",
+          isFinisher: false,
+          isPrimer: true,
+          finisherProgression: "Building toward handstand push-ups. Pike push-ups build overhead pressing strength and shoulder stability."
+        },
+        {
           id: "db-incline-press",
           name: "Dumbbell Incline Press",
+          tier: 1,
           sets: 4,
           reps: "10-12",
           rpe: "8-9",
@@ -367,6 +570,7 @@ const FORGE_DATA = {
         {
           id: "cable-flyes",
           name: "Cable Flyes",
+          tier: 2,
           sets: 3,
           reps: "12-15",
           rpe: "9",
@@ -381,6 +585,7 @@ const FORGE_DATA = {
         {
           id: "db-lateral-raise",
           name: "Dumbbell Lateral Raises",
+          tier: 1,
           sets: 4,
           reps: "12-15",
           rpe: "8-9",
@@ -393,22 +598,9 @@ const FORGE_DATA = {
           isFinisher: false
         },
         {
-          id: "cable-oh-tricep-ext",
-          name: "Overhead Tricep Extension",
-          sets: 3,
-          reps: "12-15",
-          rpe: "9",
-          rest: 45,
-          restLabel: "45 sec",
-          weightMode: "free",
-          image: "cable-oh-tricep-ext.png",
-          video: "https://www.youtube.com/watch?v=kiuVA0gs3EI",
-          tip: "Face away from cable stack, rope behind the head. Extend fully overhead, squeeze at lockout. The long head of the tricep gets stretched in this position, which is important since flat pressing doesn't load it well.",
-          isFinisher: false
-        },
-        {
           id: "tricep-pushdown",
           name: "Tricep Pushdowns",
+          tier: 2,
           sets: 3,
           reps: "12-15",
           rpe: "9",
@@ -421,19 +613,64 @@ const FORGE_DATA = {
           isFinisher: false
         },
         {
-          id: "pike-pushup",
-          name: "Pike Push-Ups",
-          sets: 2,
-          reps: "to failure",
-          rpe: "-",
+          id: "cable-oh-tricep-ext",
+          name: "Overhead Tricep Extension",
+          tier: 3,
+          sets: 3,
+          reps: "12-15",
+          rpe: "9",
           rest: 45,
           restLabel: "45 sec",
-          weightMode: "bw",
-          image: "pike-pushup.png",
-          video: "https://www.youtube.com/watch?v=sposDXWEB0A",
-          tip: "Hips high, head between the arms, pressing vertically. Entry point toward handstand push-ups. If too hard, elevate feet on a bench to reduce load. Track rep counts. When hitting 15+ on both sets, elevate feet higher.",
-          isFinisher: true,
-          finisherProgression: "Building toward handstand push-ups. Pike push-ups build overhead pressing strength and shoulder stability."
+          weightMode: "free",
+          image: "cable-oh-tricep-ext.png",
+          video: "https://www.youtube.com/watch?v=kiuVA0gs3EI",
+          tip: "Face away from cable stack, rope behind the head. Extend fully overhead, squeeze at lockout. The long head of the tricep gets stretched in this position, which is important since flat pressing doesn't load it well.",
+          isFinisher: false
+        },
+        {
+          id: "back-extension",
+          name: "Back Extension",
+          sets: 3,
+          reps: "12-15",
+          rpe: "7-8",
+          rest: 45,
+          restLabel: "45 sec",
+          weightMode: "free",
+          tier: 1,
+          image: "back-extension.png",
+          video: "https://www.youtube.com/results?search_query=45+degree+back+extension+proper+form",
+          tip: "Log 0 until bodyweight is easy for 3 sets of 15, then hold a plate to the chest. Hinge at the hips, not the spine. Rise until the body is a straight line and STOP. Hyperextending past that is how you turn a prehab exercise into the thing that hurt you.",
+          isFinisher: false
+        },
+        {
+          id: "crunch-machine",
+          name: "Crunch Machine",
+          sets: 3,
+          reps: "15-20",
+          rpe: "8-9",
+          rest: 45,
+          restLabel: "45 sec",
+          weightMode: "free",
+          tier: 3,
+          image: "crunch-machine.png",
+          video: "https://www.youtube.com/results?search_query=ab+crunch+machine+proper+form",
+          tip: "Set the seat so the pivot sits at your navel, not your chest. Short range, controlled, no yanking with the arms. Two-second squeeze at the bottom of the crunch.",
+          isFinisher: false
+        },
+        {
+          id: "supine-neck-flexion",
+          name: "Supine Neck Flexion",
+          sets: 3,
+          reps: "12",
+          rpe: "7",
+          rest: 45,
+          restLabel: "45 sec",
+          weightMode: "free",
+          tier: 1,
+          image: "supine-neck-flexion.png",
+          video: "https://www.youtube.com/results?search_query=lying+weighted+neck+flexion+tutorial",
+          tip: "Lie face-up with the head off the end of the bench. Log 0 and use bodyweight only for the first 3-4 weeks. Chin tucks toward the chest, slow down on the way back. When you add a plate, wrap it in a towel and start at 2.5 lbs. Any sharp pain or tingling, stop the set.",
+          isFinisher: false
         }
       ]
     },
@@ -447,7 +684,8 @@ const FORGE_DATA = {
       type: "hypertrophy",
       label: "Hypertrophy",
       goal: "Volume — moderate loads, higher reps, controlled tempos",
-      estimatedMinutes: 55,
+      estimatedMinutes: 58,
+      minutesBySize: { light: 30, normal: 58, extended: 84 },
       warmup: {
         name: "Dynamic Warm-Up",
         duration: "5 minutes",
@@ -460,8 +698,26 @@ const FORGE_DATA = {
       },
       exercises: [
         {
+          id: "inverted-row",
+          name: "Inverted Rows",
+          tier: 2,
+          sets: 2,
+          reps: "to failure",
+          rpe: "-",
+          rest: 45,
+          restLabel: "45 sec",
+          weightMode: "bw",
+          image: "inverted-row.png",
+          video: "https://www.youtube.com/watch?v=dYNdjKjMbyc",
+          tip: "Bar in rack at waist height. Hang underneath, body straight, pull chest to bar. More horizontal = harder. Start at an angle that allows 8+ reps. When horizontal at 15+, add a weighted vest or elevate feet.",
+          isFinisher: false,
+          isPrimer: true,
+          finisherProgression: "Building toward advanced pull-up variations. Inverted rows build horizontal pulling endurance."
+        },
+        {
           id: "seated-cable-row",
           name: "Seated Cable Row",
+          tier: 1,
           sets: 4,
           reps: "10-12",
           rpe: "8-9",
@@ -476,6 +732,7 @@ const FORGE_DATA = {
         {
           id: "wide-lat-pulldown",
           name: "Wide-Grip Lat Pulldown",
+          tier: 1,
           sets: 4,
           reps: "10-12",
           rpe: "8-9",
@@ -490,6 +747,7 @@ const FORGE_DATA = {
         {
           id: "face-pulls",
           name: "Face Pulls",
+          tier: 2,
           sets: 3,
           reps: "15",
           rpe: "8",
@@ -502,8 +760,24 @@ const FORGE_DATA = {
           isFinisher: false
         },
         {
+          id: "db-shrugs",
+          name: "Dumbbell Shrugs",
+          sets: 3,
+          reps: "12-15",
+          rpe: "9",
+          rest: 45,
+          restLabel: "45 sec",
+          weightMode: "free",
+          tier: 3,
+          image: "db-shrugs.png",
+          video: "https://www.youtube.com/results?search_query=dumbbell+shrug+proper+form+traps",
+          tip: "Dumbbells at the sides means no bar blocking the bottom, so you get a real stretch before the shrug. Straight up, pause a beat at the top, lower slowly. No rolling the shoulders, which does nothing but grind the joint.",
+          isFinisher: false
+        },
+        {
           id: "db-hammer-curls",
           name: "Dumbbell Hammer Curls",
+          tier: 2,
           sets: 3,
           reps: "12",
           rpe: "9",
@@ -518,6 +792,7 @@ const FORGE_DATA = {
         {
           id: "rear-delt-flyes",
           name: "Rear Delt Flyes",
+          tier: 3,
           sets: 3,
           reps: "12-15",
           rpe: "9",
@@ -530,19 +805,34 @@ const FORGE_DATA = {
           isFinisher: false
         },
         {
-          id: "inverted-row",
-          name: "Inverted Rows",
-          sets: 2,
-          reps: "to failure",
-          rpe: "-",
+          id: "back-extension",
+          name: "Back Extension",
+          sets: 3,
+          reps: "12-15",
+          rpe: "7-8",
           rest: 45,
           restLabel: "45 sec",
-          weightMode: "bw",
-          image: "inverted-row.png",
-          video: "https://www.youtube.com/watch?v=dYNdjKjMbyc",
-          tip: "Bar in rack at waist height. Hang underneath, body straight, pull chest to bar. More horizontal = harder. Start at an angle that allows 8+ reps. When horizontal at 15+, add a weighted vest or elevate feet.",
-          isFinisher: true,
-          finisherProgression: "Building toward advanced pull-up variations. Inverted rows build horizontal pulling endurance."
+          weightMode: "free",
+          tier: 1,
+          image: "back-extension.png",
+          video: "https://www.youtube.com/results?search_query=45+degree+back+extension+proper+form",
+          tip: "Log 0 until bodyweight is easy for 3 sets of 15, then hold a plate to the chest. Hinge at the hips, not the spine. Rise until the body is a straight line and STOP. Hyperextending past that is how you turn a prehab exercise into the thing that hurt you.",
+          isFinisher: false
+        },
+        {
+          id: "prone-neck-extension",
+          name: "Prone Neck Extension",
+          sets: 3,
+          reps: "12",
+          rpe: "7",
+          rest: 45,
+          restLabel: "45 sec",
+          weightMode: "free",
+          tier: 1,
+          image: "prone-neck-extension.png",
+          video: "https://www.youtube.com/results?search_query=prone+weighted+neck+extension+tutorial",
+          tip: "Face-down, head off the bench. Bodyweight only to start, log 0. Look up slowly, lower slower. Pairs with supine flexion on the other push day so the neck gets balanced work front and back. Same rule: sharp pain means stop, not push through.",
+          isFinisher: false
         }
       ]
     },
@@ -556,7 +846,8 @@ const FORGE_DATA = {
       type: "hypertrophy",
       label: "Hypertrophy",
       goal: "Volume — moderate loads, higher reps, controlled tempos",
-      estimatedMinutes: 60,
+      estimatedMinutes: 62,
+      minutesBySize: { light: 30, normal: 62, extended: 86 },
       warmup: {
         name: "Dynamic Warm-Up",
         duration: "5 minutes",
@@ -570,8 +861,26 @@ const FORGE_DATA = {
       },
       exercises: [
         {
+          id: "assisted-pistol-squat",
+          name: "Assisted Pistol Squats",
+          tier: 2,
+          sets: 2,
+          reps: "max each leg",
+          rpe: "-",
+          rest: 45,
+          restLabel: "45 sec",
+          weightMode: "bw",
+          image: "assisted-pistol-squat.png",
+          video: "https://www.youtube.com/watch?v=qDcniqddTeE",
+          tip: "Hold a rack post or TRX for balance. Lower on one leg to bench, touch glutes to surface, stand up. Use as much assistance as needed. Progressively lower box height and reduce hold over weeks. When you can pistol to a standard bench unassisted for 5+ reps per leg, the box comes away.",
+          isFinisher: false,
+          isPrimer: true,
+          finisherProgression: "Building toward full unassisted pistol squats. Assisted pistols build single-leg strength, balance, and ankle mobility."
+        },
+        {
           id: "bulgarian-split-squat",
           name: "Bulgarian Split Squats",
+          tier: 1,
           sets: 4,
           reps: "10-12 each",
           rpe: "8-9",
@@ -586,6 +895,7 @@ const FORGE_DATA = {
         {
           id: "lying-leg-curl",
           name: "Lying Leg Curl",
+          tier: 1,
           sets: 4,
           reps: "12",
           rpe: "9",
@@ -600,6 +910,7 @@ const FORGE_DATA = {
         {
           id: "leg-extension",
           name: "Leg Extension",
+          tier: 2,
           sets: 4,
           reps: "12",
           rpe: "9",
@@ -612,8 +923,24 @@ const FORGE_DATA = {
           isFinisher: false
         },
         {
+          id: "hip-abduction",
+          name: "Hip Abduction Machine",
+          sets: 3,
+          reps: "15-20",
+          rpe: "8-9",
+          rest: 45,
+          restLabel: "45 sec",
+          weightMode: "free",
+          tier: 2,
+          image: "hip-abduction.png",
+          video: "https://www.youtube.com/results?search_query=hip+abduction+machine+glute+medius+form",
+          tip: "Lean the torso slightly forward to bias the glute medius over the TFL. Push out under control, resist all the way back in. Weak abductors are a common source of knee and lower back complaints, so treat this as real work, not a cooldown.",
+          isFinisher: false
+        },
+        {
           id: "walking-lunges",
           name: "Walking Lunges",
+          tier: 3,
           sets: 3,
           reps: "12 each",
           rpe: "8-9",
@@ -628,6 +955,7 @@ const FORGE_DATA = {
         {
           id: "seated-calf-raise",
           name: "Seated Calf Raises",
+          tier: 2,
           sets: 4,
           reps: "15",
           rpe: "9",
@@ -640,19 +968,34 @@ const FORGE_DATA = {
           isFinisher: false
         },
         {
-          id: "assisted-pistol-squat",
-          name: "Assisted Pistol Squats",
-          sets: 2,
-          reps: "max each leg",
-          rpe: "-",
+          id: "suitcase-carry",
+          name: "Suitcase Carry",
+          sets: 3,
+          reps: "40 yd ea",
+          rpe: "8",
+          rest: 60,
+          restLabel: "60 sec",
+          weightMode: "free",
+          tier: 3,
+          image: "suitcase-carry.png",
+          video: "https://www.youtube.com/results?search_query=suitcase+carry+core+exercise+form",
+          tip: "One weight, one side, walk without leaning. The obliques on the empty side are doing the work, fighting to keep you upright. This is direct anti-tilt training for the same lower back the back extensions are protecting. Switch hands each set.",
+          isFinisher: false
+        },
+        {
+          id: "back-extension",
+          name: "Back Extension",
+          sets: 3,
+          reps: "12-15",
+          rpe: "7-8",
           rest: 45,
           restLabel: "45 sec",
-          weightMode: "bw",
-          image: "assisted-pistol-squat.png",
-          video: "https://www.youtube.com/watch?v=qDcniqddTeE",
-          tip: "Hold a rack post or TRX for balance. Lower on one leg to bench, touch glutes to surface, stand up. Use as much assistance as needed. Progressively lower box height and reduce hold over weeks. When you can pistol to a standard bench unassisted for 5+ reps per leg, the box comes away.",
-          isFinisher: true,
-          finisherProgression: "Building toward full unassisted pistol squats. Assisted pistols build single-leg strength, balance, and ankle mobility."
+          weightMode: "free",
+          tier: 1,
+          image: "back-extension.png",
+          video: "https://www.youtube.com/results?search_query=45+degree+back+extension+proper+form",
+          tip: "Log 0 until bodyweight is easy for 3 sets of 15, then hold a plate to the chest. Hinge at the hips, not the spine. Rise until the body is a straight line and STOP. Hyperextending past that is how you turn a prehab exercise into the thing that hurt you.",
+          isFinisher: false
         }
       ]
     }
