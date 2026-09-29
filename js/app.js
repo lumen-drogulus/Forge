@@ -19,6 +19,7 @@
     timerRemaining: 0,
     timerEndAt: 0,
     timerRunning: false,
+    timerTotal: 0,           // full length of the current rest, for the progress bar
     bodyWeight: 180,         // default, configurable in settings
     workoutSize: 'normal',   // light | normal | extended -> which tiers load
     pickedDayId: null,       // an alternate chosen from the picker; null = scheduled
@@ -471,7 +472,6 @@ Store.saveActiveWorkout({
     document.getElementById('info-backdrop').addEventListener('click', () => {
       dismissPanel();
     });
-    document.getElementById('settings-btn').addEventListener('click', () => renderTab('settings'));
 
     // Enter on any number input closes the phone keyboard instead of forcing a
     // swipe-back. Attached to #main-content rather than the inputs themselves
@@ -489,8 +489,10 @@ Store.saveActiveWorkout({
     document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
     const activeBtn = document.querySelector(`.nav-item[data-tab="${tab}"]`);
     if (activeBtn) activeBtn.classList.add('active');
+    updateHeaderDate();
 
     const main = document.getElementById('main-content');
+    main.scrollTop = 0;
     switch(tab) {
       case 'home': renderHome(main); break;
       case 'tracker': renderTracker(main); break;
@@ -499,47 +501,166 @@ Store.saveActiveWorkout({
     }
   }
 
+  // Header readout: 2026.09.29 · TUE
+  function updateHeaderDate() {
+    const el = document.getElementById('header-date');
+    if (!el) return;
+    const d = new Date();
+    const dow = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][d.getDay()];
+    el.textContent = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')} · ${dow}`;
+  }
+
   // ===== HOME SCREEN =====
   function renderHome(el) {
-    if (!state._calendarNavActive) {
-      const today = new Date();
-      state.calendarMonth = today.getMonth();
-      state.calendarYear = today.getFullYear();
-    }
-    state._calendarNavActive = false;
     refreshCycle();
     const scheduled = nextDay();
-    const day = selectedDay();
+    // While a session runs, Home describes that session, not the next pick.
+    const day = state.workoutActive ? activeDay() : selectedDay();
     const workout = FORGE_DATA.workouts[day.id];
-    const typeClass = day.type === 'hypertrophy' ? 'hypertrophy'
-                    : day.type === 'calisthenics' ? 'calisthenics' : 'power';
-    const isAlt = !!state.pickedDayId;
+    const typeClass = toneClass(day);
+    setAppTone(typeClass);
+    const isAlt = !state.workoutActive && !!state.pickedDayId;
+    const exs = state.workoutActive ? activeExercises() : exercisesFor(workout, state.workoutSize);
 
     // Anything already logged today, so a second session shows context
     const todayStr = todayLocal();
     const todayEntries = Store.getCompletedDays().filter(c => c.date === todayStr);
     const doneLine = todayEntries.length
-      ? `<div class="today-done-line">Already logged today: ${todayEntries.map(c => `<span class="today-done-chip">${labelFor(c)}</span>`).join(' ')}</div>`
+      ? `<div class="today-done-line">Already logged today ${todayEntries.map(c => `<span class="cal-code ${toneOf(c)}">${labelFor(c)}</span>`).join(' ')}</div>`
       : '';
+    const label = state.workoutActive ? 'In progress' : isAlt ? 'Swapped in' : todayEntries.length ? 'Next up' : 'Today';
+    const pad2 = n => String(n).padStart(2, '0');
 
     el.innerHTML = `
-      <div class="section-header">Cycle position</div>
-      <div class="cycle-bar">${renderCycleBar()}</div>
-      ${renderCalendar()}
-      <div class="today-card ${typeClass}">
-        <div class="today-card-top">
-          <div>
-            <div class="today-label ${typeClass}">${isAlt ? 'Swapped in' : todayEntries.length ? 'Next up' : 'Today'}</div>
-            <div class="today-name">${day.name}</div>
-            <div class="today-meta">${day.label} · ${exercisesFor(workout, state.workoutSize).length} exercises · ~${minutesFor(workout, state.workoutSize)} min</div>
-          </div>
-          <div class="today-day-badge">${codeFor(day.id)}</div>
+      <section class="home-readout ${typeClass}">
+        <div class="ro-label"><span class="ro-accent">${label}</span> · Cycle ${pad2(state.cycleIndex + 1)} / ${pad2(cycleLen())}</div>
+        <div class="ro-row">
+          <h1 class="ro-name${day.name.length > 12 ? ' long' : ''}">${day.name}</h1>
+          <span class="ro-code">${codeFor(day.id)}</span>
         </div>
+        <div class="ro-meta">${day.label} · ${exs.length} movements · ~${minutesFor(workout, (state.activeWorkoutLog && state.activeWorkoutLog.size) || state.workoutSize)} min</div>
         ${doneLine}
-      </div>
+      </section>
+      ${renderWeekStrip(typeClass)}
       ${renderDayPicker(scheduled, day, typeClass)}
+      ${renderMoveTable(exs, typeClass)}
       ${renderSizePicker(workout, typeClass)}
       ${buildActionArea(typeClass)}
+    `;
+  }
+
+  // ===== v0.16 HOME HELPERS =====
+  // One tone name per day: power (amber), hypertrophy (cyan), calisthenics
+  // (green) or core (violet). The CSS turns it into the accent colour.
+  function toneClass(day) {
+    const t = toneOf(day);
+    return t === 'hyp' ? 'hypertrophy' : t === 'cal' ? 'calisthenics' : t === 'core' ? 'core' : 'power';
+  }
+
+  // Tints the whole app (nav underline, header) with the day in front of you.
+  function setAppTone(tone) {
+    const app = document.getElementById('app');
+    if (!app) return;
+    app.classList.remove('power', 'hypertrophy', 'calisthenics', 'core');
+    app.classList.add(tone);
+  }
+
+  // Which cycle slot lands on a day this many days from today. If today
+  // already has a workout or a rest logged, tomorrow is the next slot;
+  // if not, today is still the scheduled slot and tomorrow is the one after.
+  function projectedIndex(daysAhead) {
+    const len = cycleLen();
+    const todayStr = todayLocal();
+    const todayUsed = Store.getCompletedDays().some(c =>
+      c.date === todayStr && (c.type === 'rest' || c.slotId !== null));
+    const step = todayUsed ? daysAhead - 1 : daysAhead;
+    return ((state.cycleIndex + step) % len + len) % len;
+  }
+
+  function entriesByDate() {
+    const byDate = {};
+    Store.getCompletedDays().forEach(c => {
+      if (!byDate[c.date]) byDate[c.date] = [];
+      byDate[c.date].push(c);
+    });
+    Object.keys(byDate).forEach(d => byDate[d].sort((a, b) => (sortKey(a) < sortKey(b) ? -1 : 1)));
+    return byDate;
+  }
+
+  function dateStrOf(d) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  // Rolling week: two days back, today, four ahead. Past days and today open
+  // the day sheet (same as the calendar); future days show the projection.
+  function renderWeekStrip(typeClass) {
+    const byDate = entriesByDate();
+    const now = new Date();
+    const DOW = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
+    let cells = '';
+    for (let off = -2; off <= 4; off++) {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + off);
+      const ds = dateStrOf(d);
+      const entries = byDate[ds] || [];
+      let codes;
+      if (entries.length) {
+        codes = `<span class="cal-code ${toneOf(entries[0])}">${labelFor(entries[0])}</span>` +
+          (entries.length > 1 ? `<span class="cal-code more">+${entries.length - 1}</span>` : '');
+      } else if (off < 0) {
+        codes = '<span class="cal-code blank">·</span>';
+      } else {
+        const fd = FORGE_DATA.cycleDays[projectedIndex(off)];
+        codes = `<span class="cal-code ${toneOf(fd)} projected">${codeFor(fd.id)}</span>`;
+      }
+      const cls = off === 0 ? 'wk-day today' : off > 0 ? 'wk-day future' : 'wk-day';
+      const inner = `<span class="wk-dow">${DOW[d.getDay()]}</span><span class="wk-date">${String(d.getDate()).padStart(2, '0')}</span><span class="wk-codes">${codes}</span>`;
+      cells += off > 0
+        ? `<div class="${cls}">${inner}</div>`
+        : `<button class="${cls}" onclick="FORGE.openDaySheet('${ds}')" aria-label="${ds}">${inner}</button>`;
+    }
+    return `
+      <section class="week ${typeClass}">
+        <div class="week-head">
+          <span class="week-head-label">This week</span>
+          <span class="week-head-links">
+            <button class="link-btn" onclick="FORGE.openKeySheet()"><i class="ti ti-help-circle"></i>Key</button>
+            <button class="link-btn acc" onclick="FORGE.openTracker()">Month <i class="ti ti-chevron-right"></i></button>
+          </span>
+        </div>
+        <div class="week-strip">${cells}</div>
+      </section>
+    `;
+  }
+
+  function shortReps(r) {
+    const s = String(r);
+    if (/fail/i.test(s)) return 'F';
+    if (/max/i.test(s)) return 'MAX';
+    return s.replace(/\s*reps?/i, '').replace(/ dir x /i, 'D×').replace(/\s+/g, '');
+  }
+  function shortRest(label) {
+    return String(label || '').replace(/\s*sec(onds)?/i, 's');
+  }
+
+  // Today's movements as a spec table. During a session, finished rows grey out.
+  function renderMoveTable(exs, typeClass) {
+    const log = state.workoutActive && state.activeWorkoutLog ? state.activeWorkoutLog.exercises : null;
+    const rows = exs.map((ex, i) => {
+      const done = log && log[i] && log[i].completed;
+      const tag = ex.isPrimer ? '<span class="primer-tag">Primer</span>' : ex.isFinisher ? '<span class="finisher-tag">Finisher</span>' : '';
+      return `
+        <div class="mt-row${done ? ' done' : ''}">
+          <span class="mt-n">${String(i + 1).padStart(2, '0')}</span>
+          <span class="mt-name"><span class="mt-name-text">${ex.name}</span>${tag}</span>
+          <span class="mt-sr">${ex.sets}×${shortReps(ex.reps)}</span>
+          <span class="mt-rest">${shortRest(ex.restLabel)}</span>
+        </div>`;
+    }).join('');
+    return `
+      <section class="move-table ${typeClass}">
+        <div class="mt-head"><span>#</span><span>Movement</span><span>S×R</span><span>Rest</span></div>
+        ${rows}
+      </section>
     `;
   }
 
@@ -549,16 +670,17 @@ Store.saveActiveWorkout({
     const advances = selectedAdvances();
     const isAlt = !!state.pickedDayId;
     return `
-      <div class="day-picker-row">
-        <button class="day-picker-btn ${typeClass}" onclick="FORGE.openPickerSheet()">
+      <div class="day-picker-row ${typeClass}">
+        <button class="day-picker-btn" onclick="FORGE.openPickerSheet()">
           <span class="dp-code">${codeFor(day.id)}</span>
           <span class="dp-name">${day.name}</span>
+          <span class="dp-swap">SWAP</span>
           <i class="ti ti-chevron-down"></i>
         </button>
         ${isAlt ? `
         <button class="counts-toggle ${advances ? 'on' : ''}" onclick="FORGE.toggleCountsAs()">
-          <i class="ti ti-${advances ? 'check' : 'minus'}"></i>
-          Counts as ${scheduled.name}
+          <i class="ti ti-${advances ? 'square-check' : 'square'}"></i>
+          ${advances ? `Counts as ${scheduled.name}` : `Bonus · cycle stays on ${scheduled.name}`}
         </button>` : ''}
       </div>
     `;
@@ -642,28 +764,30 @@ Store.saveActiveWorkout({
   function buildActionArea(typeClass) {
     if (state.workoutActive && state.activeWorkoutLog) {
       const wLog = state.activeWorkoutLog;
-      const wDay = FORGE_DATA.cycleDays.find(d => d.id === wLog.dayId);
-      const wType = wDay && wDay.type === 'hypertrophy' ? 'hypertrophy' : 'power';
+      const wDay = dayById(wLog.dayId);
+      const wTone = wDay ? toneClass(wDay) : 'power';
       const doneEx = wLog.exercises.filter(e => e.completed).length;
       const setsLogged = wLog.exercises.reduce((s, e) => s + e.sets.length, 0);
       return `
-        <div class="resume-card ${wType}" onclick="FORGE.resumeWorkout()">
+        <div class="resume-card ${wTone}" onclick="FORGE.resumeWorkout()">
           <div>
             <div class="resume-label">Workout in progress</div>
             <div class="resume-name">${wDay ? wDay.name : wLog.dayId}</div>
             <div class="resume-detail">${doneEx}/${wLog.exercises.length} exercises · ${setsLogged} sets logged</div>
           </div>
-          <div class="resume-btn ${wType}">RESUME</div>
+          <div class="resume-btn">RESUME</div>
         </div>
       `;
     }
     return `
-      <button class="start-btn ${typeClass}" onclick="FORGE.startWorkout()">
-        START WORKOUT
-      </button>
-      <button class="rest-link-btn" onclick="FORGE.logRestToday()">
-        <i class="ti ti-moon"></i> Log today as a rest day
-      </button>
+      <div class="action-row ${typeClass}">
+        <button class="rest-link-btn" onclick="FORGE.logRestToday()" aria-label="Log today as a rest day">
+          ✕ Rest
+        </button>
+        <button class="start-btn" onclick="FORGE.startWorkout()">
+          START WORKOUT <i class="ti ti-arrow-right"></i>
+        </button>
+      </div>
     `;
   }
 
@@ -688,24 +812,15 @@ Store.saveActiveWorkout({
     const today = new Date();
     const year = state.calendarYear;
     const month = state.calendarMonth;
-    const monthName = new Date(year, month).toLocaleString('default', { month: 'long', year: 'numeric' });
+    const monthName = new Date(year, month).toLocaleString('default', { month: 'short', year: 'numeric' });
     const firstDay = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const isCurrentMonth = (year === today.getFullYear() && month === today.getMonth());
     const todayDate = today.getDate();
-    const completedDays = Store.getCompletedDays();
+    const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
-    // Group by date. A date can now hold several entries (a workout plus a
-    // bonus core session, say), which the old one-entry-per-date model
-    // silently overwrote.
-    const byDate = {};
-    completedDays.forEach(c => {
-      if (!byDate[c.date]) byDate[c.date] = [];
-      byDate[c.date].push(c);
-    });
-    Object.keys(byDate).forEach(d => {
-      byDate[d].sort((a, b) => (sortKey(a) < sortKey(b) ? -1 : 1));
-    });
+    // A date can hold several entries (a workout plus a bonus core session, say).
+    const byDate = entriesByDate();
 
     let grid = '<div class="calendar-grid">';
     ['S','M','T','W','T','F','S'].forEach(d => { grid += `<div class="cal-day-header">${d}</div>`; });
@@ -716,10 +831,12 @@ Store.saveActiveWorkout({
       const entries = byDate[dateStr] || [];
       const thisDate = new Date(year, month, d);
       const isToday = isCurrentMonth && d === todayDate;
-      const isPast = thisDate < new Date(today.getFullYear(), today.getMonth(), todayDate);
+      const isPast = thisDate < todayMidnight;
+      const isFuture = !isPast && !isToday;
 
       let cls = 'cal-day';
       if (isToday) cls += ' today-ring';
+      if (isFuture) cls += ' future';
 
       let body = `<div class="cal-date">${d}</div>`;
 
@@ -731,13 +848,10 @@ Store.saveActiveWorkout({
         ).join('');
         const more = entries.length > 2 ? `<span class="cal-code more">+${entries.length - 1}</span>` : '';
         body += `<div class="cal-codes">${chips}${more}</div>`;
-      } else if (!isPast && !isToday) {
-        // Projected schedule: step forward through the cycle from today
-        const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      } else if (!isPast) {
+        // Projected schedule for today and ahead
         const daysAhead = Math.round((thisDate - todayMidnight) / (1000 * 60 * 60 * 24));
-        const len = cycleLen();
-        const futureIdx = ((state.cycleIndex + daysAhead - 1) % len + len) % len;
-        const fd = FORGE_DATA.cycleDays[futureIdx];
+        const fd = FORGE_DATA.cycleDays[projectedIndex(daysAhead)];
         body += `<div class="cal-codes"><span class="cal-code ${toneOf(fd)} projected">${codeFor(fd.id)}</span></div>`;
       } else {
         body += `<div class="cal-codes"><span class="cal-code blank">·</span></div>`;
@@ -750,15 +864,17 @@ Store.saveActiveWorkout({
     return `
       <div class="calendar-section">
         <div class="calendar-header">
-          <button class="calendar-nav-btn" onclick="FORGE.calendarPrev()"><i class="ti ti-chevron-left"></i></button>
+          <button class="calendar-nav-btn" onclick="FORGE.calendarPrev()" aria-label="Previous month"><i class="ti ti-chevron-left"></i></button>
           <div class="calendar-month">${monthName}</div>
-          <button class="calendar-nav-btn" onclick="FORGE.calendarNext()"><i class="ti ti-chevron-right"></i></button>
+          <button class="calendar-nav-btn" onclick="FORGE.calendarNext()" aria-label="Next month"><i class="ti ti-chevron-right"></i></button>
         </div>
         ${grid}
-       <div class="calendar-legend">
-          <div><span class="legend-dot" style="background:var(--amber)"></span>Power</div>
-          <div><span class="legend-dot" style="background:var(--cyan)"></span>Hypertrophy</div>
-          <div><span class="legend-dot" style="background:var(--gray)"></span>Rest</div>
+        <div class="calendar-legend">
+          <div><span class="legend-dot" style="background:var(--amber)"></span>Pwr</div>
+          <div><span class="legend-dot" style="background:var(--cyan)"></span>Hyp</div>
+          <div><span class="legend-dot" style="background:var(--green)"></span>Cal</div>
+          <div><span class="legend-dot" style="background:var(--violet)"></span>Core</div>
+          <div style="color:var(--gray)">✕ Rest</div>
           <button class="legend-key-btn" onclick="FORGE.openKeySheet()">
             <i class="ti ti-help-circle"></i> Key
           </button>
@@ -907,7 +1023,13 @@ Store.saveActiveWorkout({
     if (!dateStr) return;
     addDayEntry(dateStr, dayId);
     openDaySheet(dateStr);
-    renderHome(document.getElementById('main-content'));
+    refreshView();
+  }
+
+  // Re-render whichever tab is showing. The day sheet opens from both Home
+  // (week strip) and Tracker (calendar), so edits must refresh the right one.
+  function refreshView() {
+    renderTab(state.currentTab || 'home');
   }
 
   function clearDayEntry(uid) {
@@ -930,7 +1052,7 @@ Store.saveActiveWorkout({
     refreshCycle();
     state._calendarNavActive = true;
     openDaySheet(state._sheetDate);
-    renderHome(document.getElementById('main-content'));
+    refreshView();
   }
 
   function logRestToday() {
@@ -942,14 +1064,14 @@ Store.saveActiveWorkout({
     state.calendarMonth--;
     if (state.calendarMonth < 0) { state.calendarMonth = 11; state.calendarYear--; }
     state._calendarNavActive = true;
-    renderHome(document.getElementById('main-content'));
+    renderTab('tracker');
   }
 
   function calendarNext() {
     state.calendarMonth++;
     if (state.calendarMonth > 11) { state.calendarMonth = 0; state.calendarYear++; }
     state._calendarNavActive = true;
-    renderHome(document.getElementById('main-content'));
+    renderTab('tracker');
   }
 
   // ===== WORKOUT FLOW =====
@@ -985,6 +1107,7 @@ Store.saveActiveWorkout({
 
   function renderWorkoutView() {
     const main = document.getElementById('main-content');
+    setAppTone(toneClass(activeDay()));
     switch(state.workoutPhase) {
       case 'overview': renderWorkoutOverview(main); break;
       case 'warmup': renderWarmup(main); break;
@@ -996,7 +1119,7 @@ Store.saveActiveWorkout({
   function renderWorkoutOverview(el) {
     const day = activeDay();
     const workout = FORGE_DATA.workouts[day.id];
-    const typeClass = day.type === 'hypertrophy' ? 'hypertrophy' : 'power';
+    const typeClass = toneClass(day);
 
     let items = `
       <div class="wo-item" onclick="FORGE.goToWarmup()">
@@ -1018,10 +1141,10 @@ Store.saveActiveWorkout({
 
       items += `
         <div class="${itemCls}" onclick="FORGE.goToExercise(${i})">
-          <div class="${numCls}">${done ? '<i class="ti ti-check" style="font-size:12px"></i>' : i + 1}</div>
+          <div class="${numCls}">${done ? '<i class="ti ti-check" style="font-size:14px"></i>' : String(i + 1).padStart(2, '0')}</div>
           <div class="wo-item-info">
-            <div class="wo-item-name">${ex.name}${ex.isFinisher ? `<span class="finisher-tag ${typeClass}">Finisher</span>` : ex.isPrimer ? `<span class="primer-tag ${typeClass}">Primer</span>` : ''}</div>
-            <div class="wo-item-detail">${ex.sets} sets · ${ex.reps} reps · ${ex.restLabel}</div>
+            <div class="wo-item-name">${ex.name}${ex.isFinisher ? `<span class="finisher-tag">Finisher</span>` : ex.isPrimer ? `<span class="primer-tag">Primer</span>` : ''}</div>
+            <div class="wo-item-detail">${ex.sets} × ${shortReps(ex.reps)} · rest ${shortRest(ex.restLabel)}</div>
           </div>
           <div class="wo-item-status"><i class="ti ti-chevron-right"></i></div>
         </div>
@@ -1031,34 +1154,39 @@ Store.saveActiveWorkout({
     const allDone = state.activeWorkoutLog.exercises.every(e => e.completed);
 
     el.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <div class="ov-head ${typeClass}">
         <div>
-          <div class="exercise-day-label ${typeClass === 'hypertrophy' ? 'text-cyan' : 'text-amber'}">${day.name} · ${day.label}</div>
-          <div style="font-size:12px;color:var(--text-secondary);">${workout.goal}</div>
+          <div class="exercise-day-label">${day.name} · ${day.label}</div>
+          <div class="ov-goal">${workout.goal}</div>
         </div>
         <button class="skip-btn" onclick="FORGE.endWorkout()">End</button>
       </div>
-      <div class="workout-overview-list">${items}</div>
-      ${allDone ? `<button class="save-set-btn ${typeClass}" onclick="FORGE.completeWorkout()">COMPLETE WORKOUT</button>` : ''}
+      <div class="workout-overview-list ${typeClass}">${items}</div>
+      ${allDone ? `<button class="save-set-btn ${typeClass}" onclick="FORGE.completeWorkout()">Complete workout <i class="ti ti-check"></i></button>` : ''}
     `;
   }
 
   function renderWarmup(el) {
     const day = activeDay();
     const workout = FORGE_DATA.workouts[day.id];
-    const typeClass = day.type === 'hypertrophy' ? 'hypertrophy' : 'power';
+    const typeClass = toneClass(day);
 
     el.innerHTML = `
-      <button class="back-btn" onclick="FORGE.backToOverview()" style="margin-bottom:12px;">
-        <i class="ti ti-chevron-left"></i> Back
-      </button>
-      <div class="warmup-card">
+      <div class="exercise-header ${typeClass}">
+        <button class="back-btn" onclick="FORGE.backToOverview()" aria-label="Back to overview"><i class="ti ti-chevron-left"></i></button>
+        <div class="exercise-header-mid">
+          <div class="exercise-day-label">${day.name} · ${day.label}</div>
+          <div class="exercise-position">Warm-up</div>
+        </div>
+        <span style="width:44px"></span>
+      </div>
+      <div class="warmup-card ${typeClass}">
         <div class="warmup-title">${workout.warmup.name}</div>
         <div class="warmup-duration">${workout.warmup.duration}</div>
         ${workout.warmup.movements.map(m => `<div class="warmup-movement">${m}</div>`).join('')}
       </div>
       <button class="warmup-done-btn ${typeClass}" onclick="FORGE.warmupDone()">
-        WARM-UP COMPLETE
+        Warm-up complete <i class="ti ti-arrow-right"></i>
       </button>
     `;
   }
@@ -1081,7 +1209,7 @@ Store.saveActiveWorkout({
     const plan = activeExercises();
     const ex = plan[state.currentExerciseIndex];
     const log = state.activeWorkoutLog.exercises[state.currentExerciseIndex];
-    const typeClass = day.type === 'hypertrophy' ? 'hypertrophy' : 'power';
+    const typeClass = toneClass(day);
     const totalExercises = plan.length;
 
     // Get previous data for this exercise
@@ -1099,7 +1227,7 @@ Store.saveActiveWorkout({
       const loggedSet = log.sets[s];
       let cls = 'set-indicator';
       if (loggedSet) cls += ' done';
-      else if (s === currentSet) cls += ` current ${typeClass}`;
+      else if (s === currentSet) cls += ' current';
       else cls += ' upcoming';
 
       const isEditing = state.editingSetIndex === s;
@@ -1110,6 +1238,12 @@ Store.saveActiveWorkout({
         </div>
       `;
     }
+
+    // Progress ticks, one per exercise in today's plan
+    const ticks = plan.map((p, i) => {
+      const done = state.activeWorkoutLog.exercises[i] && state.activeWorkoutLog.exercises[i].completed;
+      return `<span class="${done ? 'done' : i === state.currentExerciseIndex ? 'current' : ''}"></span>`;
+    }).join('');
 
     // Weight input based on mode
     const isBW = ex.weightMode === 'bw';
@@ -1122,28 +1256,46 @@ Store.saveActiveWorkout({
       : (log.sets.length > 0
           ? enteredOf(log.sets[log.sets.length - 1], ex)
           : (prevData ? enteredOf({ weight: prevData.weight }, ex) : ''));
+    const unit = state.weightUnit === 'kg' ? 'kg' : 'lb';
+    const loadLabel = isBWPlus ? `Added · ${unit}` : isBWMinus ? `Assist · ${unit}` : `Load · ${unit}`;
 
     // Build rep options (or seconds for time-tracked exercises)
     const isTimeMode = ex.trackMode === 'time';
-    const editReps = editingSet ? (editingSet.repsDisplay || editingSet.reps) : undefined;
     const repsValue = isTimeMode ? 0 : (editingSet ? (parseInt(editingSet.reps) || 0) : (log.sets.length > 0 ? (parseInt(log.sets[log.sets.length - 1].reps) || getDefaultReps(ex.reps)) : getDefaultReps(ex.reps)));
     const lastSeconds = isTimeMode ? (editingSet ? editingSet.reps : (log.sets.length > 0 ? log.sets[log.sets.length - 1].reps : 30)) : 0;
     const allSetsDone = currentSet >= numSets;
 
+    const trendCell = (t) => `
+        <div class="stat-card">
+          <div class="stat-label">Trend</div>
+          <div class="stat-value ${t ? (t.direction === 'up' ? 'trend-up' : t.direction === 'down' ? 'trend-down' : '') : ''}">
+            ${t ? `${t.direction === 'up' ? '↑' : t.direction === 'down' ? '↓' : '→'} ${t.percent}` : '—'}
+          </div>
+          <div class="stat-detail">${t ? t.detail : 'Need 3+ sessions'}</div>
+        </div>`;
+
+    const nextIdx = state.currentExerciseIndex + 1;
+    const nextEx = nextIdx < plan.length ? plan[nextIdx] : null;
+    const running = state.timerRunning;
+    const restPct = running && state.timerTotal ? Math.round(100 * state.timerRemaining / state.timerTotal) : 0;
+
     el.innerHTML = `
-      <div class="exercise-header">
-        <div class="exercise-header-left">
-          <button class="back-btn" onclick="FORGE.backToOverview()"><i class="ti ti-chevron-left"></i></button>
-          <div>
-            <div class="exercise-day-label ${typeClass === 'hypertrophy' ? 'text-cyan' : 'text-amber'}">${day.name} · ${day.label}</div>
+      <div class="${typeClass}">
+        <div class="exercise-header">
+          <button class="back-btn" onclick="FORGE.backToOverview()" aria-label="Back to overview"><i class="ti ti-chevron-left"></i></button>
+          <div class="exercise-header-mid">
+            <div class="exercise-day-label">${day.name} · ${day.label}</div>
             <div class="exercise-position">Exercise ${state.currentExerciseIndex + 1} of ${totalExercises}</div>
           </div>
+          <button class="skip-btn" onclick="FORGE.skipExercise()">Skip <i class="ti ti-arrow-right"></i></button>
         </div>
-        <button class="skip-btn" onclick="FORGE.skipExercise()">Skip <i class="ti ti-arrow-right" style="font-size:12px"></i></button>
+        <div class="ex-progress">${ticks}</div>
       </div>
 
-      <div class="exercise-name">${ex.name}</div>
-      <div class="exercise-params">${ex.sets} sets · ${ex.reps} reps${ex.rpe !== '-' ? ` · RPE ${ex.rpe}` : ''} · Rest ${ex.restLabel}</div>
+      <div class="${typeClass}">
+        <h1 class="exercise-name">${ex.name}</h1>
+        <div class="exercise-params">${ex.sets} sets · ${ex.reps} reps${ex.rpe !== '-' ? ` · RPE ${ex.rpe}` : ''} · Rest ${ex.restLabel}</div>
+      </div>
 
       <div class="exercise-actions">
         <button class="action-btn" onclick="FORGE.showInfo()">
@@ -1152,132 +1304,117 @@ Store.saveActiveWorkout({
         <button class="action-btn" onclick="window.open('${ex.video}', '_blank')">
           <i class="ti ti-player-play"></i> Demo
         </button>
-        ${!isBW ? `
+        ${!isBW && !isTimeMode ? `
         <button class="action-btn" onclick="FORGE.openPlateCalc()">
           <i class="ti ti-barbell"></i> Plates
         </button>` : ''}
       </div>
 
-      <div class="stats-row">
+      <div class="stats-row ${typeClass}">
         ${isTimeMode ? `
         <div class="stat-card">
           <div class="stat-label">Last time</div>
-          <div class="stat-value font-mono">${(() => { const td = getTimePreviousData(ex.id, day.id); return td ? td.display : '—'; })()}</div>
+          <div class="stat-value">${(() => { const td = getTimePreviousData(ex.id, day.id); return td ? td.display : '—'; })()}</div>
           <div class="stat-detail">${(() => { const td = getTimePreviousData(ex.id, day.id); return td ? td.detail : 'No data'; })()}</div>
         </div>
         <div class="stat-card">
           <div class="stat-label">Best time</div>
-          <div class="stat-value pr font-mono">${(() => { const tp = getTimePR(ex.id); return tp ? tp.display : '—'; })()}</div>
+          <div class="stat-value pr">${(() => { const tp = getTimePR(ex.id); return tp ? tp.display : '—'; })()}</div>
           <div class="stat-detail">${(() => { const tp = getTimePR(ex.id); return tp ? tp.detail : 'No data'; })()}</div>
         </div>
-        <div class="stat-card">
-          <div class="stat-label">Trend</div>
-          <div class="stat-value ${(() => { const tt = getTimeTrend(ex.id, day.id); return tt ? (tt.direction === 'up' ? 'trend-up' : tt.direction === 'down' ? 'trend-down' : '') : ''; })()} font-mono">
-            ${(() => { const tt = getTimeTrend(ex.id, day.id); return tt ? `${tt.direction === 'up' ? '↑' : tt.direction === 'down' ? '↓' : '→'} ${tt.percent}` : '—'; })()}
-          </div>
-          <div class="stat-detail">${(() => { const tt = getTimeTrend(ex.id, day.id); return tt ? tt.detail : 'Need 3+ sessions'; })()}</div>
-        </div>
+        ${trendCell(getTimeTrend(ex.id, day.id))}
         ` : `
         <div class="stat-card">
           <div class="stat-label">Last time</div>
-          <div class="stat-value font-mono">${prevData ? prevData.weight + ' ' + state.weightUnit : '—'}</div>
+          <div class="stat-value">${prevData ? prevData.weight + ' ' + unit : '—'}</div>
           <div class="stat-detail">${prevData ? prevData.detail : 'No data'}</div>
         </div>
         <div class="stat-card">
           <div class="stat-label">Best set</div>
-          <div class="stat-value pr font-mono">${prData ? prData.display : '—'}</div>
+          <div class="stat-value pr">${prData ? prData.display : '—'}</div>
           <div class="stat-detail">${prData ? prData.detail : 'No data'}</div>
         </div>
-        <div class="stat-card">
-          <div class="stat-label">Trend</div>
-          <div class="stat-value ${trendData ? (trendData.direction === 'up' ? 'trend-up' : trendData.direction === 'down' ? 'trend-down' : '') : ''} font-mono">
-            ${trendData ? `${trendData.direction === 'up' ? '↑' : trendData.direction === 'down' ? '↓' : '→'} ${trendData.percent}` : '—'}
-          </div>
-          <div class="stat-detail">${trendData ? trendData.detail : 'Need 3+ sessions'}</div>
-        </div>
+        ${trendCell(trendData)}
         `}
       </div>
 
-      <div class="set-indicators">${setIndicators}</div>
-
       ${allSetsDone && state.editingSetIndex === null ? `
+        <div class="set-indicators ${typeClass}">${setIndicators}</div>
         <button class="save-set-btn ${typeClass}" onclick="FORGE.finishExercise()">
-          ${state.currentExerciseIndex < totalExercises - 1 ? 'NEXT EXERCISE' : 'FINISH LAST EXERCISE'}
+          ${state.currentExerciseIndex < totalExercises - 1 ? 'Next exercise' : 'Finish last exercise'} <i class="ti ti-arrow-right"></i>
         </button>
       ` : `
-        <div class="set-label">${state.editingSetIndex !== null ? `Editing set ${state.editingSetIndex + 1}` : `Set ${currentSet + 1} of ${numSets}`}</div>
-
         ${hasBWModes ? `
-          <div class="bw-toggle" id="bw-toggle">
-            <button class="bw-btn ${isBW ? 'active' : ''} ${typeClass}" onclick="FORGE.setBWMode('bw')">BW</button>
-            <button class="bw-btn ${isBWPlus ? 'active' : ''} ${typeClass}" onclick="FORGE.setBWMode('bw-plus')">BW+</button>
-            <button class="bw-btn ${isBWMinus ? 'active' : ''} ${typeClass}" onclick="FORGE.setBWMode('bw-minus')">BW-</button>
-            <button class="bw-btn ${!hasBWModes ? 'active' : ''} ${typeClass}" onclick="FORGE.setBWMode('free')">Free</button>
+          <div class="bw-toggle ${typeClass}" id="bw-toggle">
+            <button class="bw-btn ${isBW ? 'active' : ''}" onclick="FORGE.setBWMode('bw')">BW</button>
+            <button class="bw-btn ${isBWPlus ? 'active' : ''}" onclick="FORGE.setBWMode('bw-plus')">BW+</button>
+            <button class="bw-btn ${isBWMinus ? 'active' : ''}" onclick="FORGE.setBWMode('bw-minus')">BW−</button>
+            <button class="bw-btn ${!hasBWModes ? 'active' : ''}" onclick="FORGE.setBWMode('free')">Free</button>
           </div>
         ` : ''}
 
-        <div class="input-row">
-          <div class="input-group">
-            <label>Weight (${state.weightUnit})</label>
-            ${isBW ? `
-              <div style="background:var(--bg-surface);border-radius:6px;padding:10px;text-align:center;font-family:var(--font-mono);font-size:18px;color:var(--text-secondary);">BW</div>
-            ` : `
-              <div class="weight-input-wrap">
-                <button class="weight-adj" onclick="FORGE.adjWeight(-5)">-5</button>
-                <input type="number" class="weight-input ${typeClass}" id="weight-input" value="${lastWeight}" inputmode="numeric" enterkeyhint="done" placeholder="0">
-                <button class="weight-adj" onclick="FORGE.adjWeight(5)">+5</button>
-              </div>
-            `}
-          </div>
-          <div class="input-group">
-            <label>${isTimeMode ? 'Seconds' : 'Reps'}</label>
-            ${isTimeMode ? `
-              <div class="stopwatch-widget ${state.stopwatchRunning ? 'running' : ''} ${typeClass}" onclick="FORGE.toggleStopwatch()" id="stopwatch-widget">
-                <i class="ti ti-${state.stopwatchRunning ? 'player-stop' : 'player-play'} stopwatch-icon"></i>
-                <span class="stopwatch-time" id="stopwatch-display">${state.stopwatchRunning ? formatTime(state.stopwatchElapsed) : 'Tap to time'}</span>
-              </div>
-              <div class="weight-input-wrap" style="margin-top:6px;">
-                <button class="weight-adj" onclick="FORGE.adjSeconds(-5)">-5</button>
-                <input type="number" class="weight-input ${typeClass}" id="seconds-input" value="${lastSeconds}" inputmode="numeric" enterkeyhint="done" placeholder="0">
-                <button class="weight-adj" onclick="FORGE.adjSeconds(5)">+5</button>
-              </div>
-            ` : `
-              <div class="weight-input-wrap">
-                <button class="weight-adj" onclick="FORGE.adjReps(-1)">-1</button>
-                <input type="number" class="weight-input ${typeClass}" id="reps-input" value="${repsValue}" inputmode="numeric" enterkeyhint="done" placeholder="0">
-                <button class="weight-adj" onclick="FORGE.adjReps(1)">+1</button>
-              </div>
-            `}
-          </div>
-        </div>
-
-        <div class="rest-timer ${state.timerRunning ? 'active' : ''} ${typeClass}" id="rest-timer">
-          <div class="rest-timer-left">
-            <i class="ti ti-clock rest-timer-icon" style="color:var(${typeClass === 'hypertrophy' ? '--cyan' : '--amber'})"></i>
-            <span class="rest-timer-label">${state.timerRunning ? 'Resting...' : 'Rest timer'}</span>
-          </div>
-          <div class="rest-timer-right">
-            <span class="rest-timer-display ${typeClass}" id="timer-display">${formatTime(state.timerRunning ? state.timerRemaining : ex.rest)}</span>
-            <button class="rest-timer-badge ${typeClass}" onclick="FORGE.toggleTimer(${ex.rest})">${state.timerRunning ? 'Stop' : ex.restLabel}</button>
-          </div>
-        </div>
-
-        ${(() => {
-          const nextIdx = state.currentExerciseIndex + 1;
-          const nextEx = nextIdx < activeExercises().length ? activeExercises()[nextIdx] : null;
-          return nextEx && state.editingSetIndex === null ? `
-            <div class="up-next-preview">
-              <span class="up-next-label">Up next</span>
-              <span class="up-next-name">${nextEx.name}${nextEx.isFinisher ? ' 🔥' : ''}</span>
-              <span class="up-next-detail">${nextEx.sets}×${nextEx.reps} · ${nextEx.restLabel}</span>
+        <div class="load-block ${typeClass}">
+          ${isTimeMode ? `
+            <div class="stopwatch-widget ${state.stopwatchRunning ? 'running' : ''}" onclick="FORGE.toggleStopwatch()" id="stopwatch-widget" role="button" aria-label="Start or stop the stopwatch">
+              <i class="ti ti-${state.stopwatchRunning ? 'player-stop' : 'player-play'} stopwatch-icon"></i>
+              <span class="stopwatch-time" id="stopwatch-display">${state.stopwatchRunning ? formatTime(state.stopwatchElapsed) : 'Tap to time'}</span>
             </div>
-          ` : '';
-        })()}
+            <div class="reps-row">
+              <button class="reps-adj" onclick="FORGE.adjSeconds(-5)" aria-label="Minus 5 seconds">−5</button>
+              <label class="load-label" for="seconds-input">Seconds</label>
+              <input type="number" class="reps-input" id="seconds-input" value="${lastSeconds}" inputmode="numeric" enterkeyhint="done" placeholder="0">
+              <button class="reps-adj" onclick="FORGE.adjSeconds(5)" aria-label="Plus 5 seconds">+5</button>
+            </div>
+          ` : `
+            <div class="load-row">
+              ${isBW ? `
+                <span style="width:56px"></span>
+                <div class="load-center"><span class="load-label">Bodyweight</span><span class="load-bw">BW</span></div>
+                <span style="width:56px"></span>
+              ` : `
+                <button class="load-adj" onclick="FORGE.adjWeight(-5)" aria-label="Minus 5">−5</button>
+                <div class="load-center">
+                  <label class="load-label" for="weight-input">${loadLabel}</label>
+                  <input type="number" class="load-input" id="weight-input" value="${lastWeight}" inputmode="numeric" enterkeyhint="done" placeholder="0">
+                </div>
+                <button class="load-adj" onclick="FORGE.adjWeight(5)" aria-label="Plus 5">+5</button>
+              `}
+            </div>
+            <div class="reps-row">
+              <button class="reps-adj" onclick="FORGE.adjReps(-1)" aria-label="Minus 1 rep">−1</button>
+              <label class="load-label" for="reps-input">Reps</label>
+              <input type="number" class="reps-input" id="reps-input" value="${repsValue}" inputmode="numeric" enterkeyhint="done" placeholder="0">
+              <button class="reps-adj" onclick="FORGE.adjReps(1)" aria-label="Plus 1 rep">+1</button>
+            </div>
+          `}
+        </div>
+
+        <div class="set-indicators ${typeClass}">${setIndicators}</div>
+
+        <div class="rest-timer ${running ? 'active' : ''} ${typeClass}" id="rest-timer">
+          <div class="rest-timer-top">
+            <span class="rest-timer-label" id="timer-label">${running ? 'Resting' : 'Rest'}</span>
+            <span class="rest-timer-display" id="timer-display">${formatTime(running ? state.timerRemaining : ex.rest)}</span>
+            <span class="rest-spacer"></span>
+            <button class="rest-extend" id="timer-extend" onclick="FORGE.extendTimer(15)" ${running ? '' : 'hidden'}>+15s</button>
+            <button class="rest-timer-badge" id="timer-badge" data-label="Start ${ex.restLabel}" onclick="FORGE.toggleTimer(${ex.rest})">${running ? 'Stop' : 'Start ' + ex.restLabel}</button>
+          </div>
+          <div class="rest-bar"><div class="rest-bar-fill" id="timer-bar" style="width:${restPct}%"></div></div>
+        </div>
+
+        ${nextEx && state.editingSetIndex === null ? `
+          <div class="up-next-preview">
+            <span class="up-next-label">Up next ›</span>
+            <span class="up-next-name">${nextEx.name}${nextEx.isFinisher ? ' 🔥' : ''}</span>
+            <span class="up-next-detail">${nextEx.sets}×${shortReps(nextEx.reps)} · ${shortRest(nextEx.restLabel)}</span>
+          </div>
+        ` : ''}
 
         <button class="save-set-btn ${typeClass}" onclick="${state.editingSetIndex !== null ? 'FORGE.updateSet()' : 'FORGE.saveSet()'}">
-          ${state.editingSetIndex !== null ? 'UPDATE SET' : 'SAVE SET'}
+          ${state.editingSetIndex !== null ? 'Update set' : 'Save set'}
+          <span class="save-sub">${state.editingSetIndex !== null ? `SET ${state.editingSetIndex + 1}` : `${currentSet + 1} / ${numSets}`}</span>
         </button>
-        ${state.editingSetIndex !== null ? `<button class="skip-btn" style="width:100%;margin-top:8px;padding:8px;" onclick="FORGE.cancelEdit()">Cancel edit</button>` : ''}
+        ${state.editingSetIndex !== null ? `<button class="skip-btn cancel-edit-btn" onclick="FORGE.cancelEdit()">Cancel edit</button>` : ''}
       `}
     `;
   }
@@ -1526,19 +1663,24 @@ Store.saveActiveWorkout({
 
   function renderComplete(el) {
     const day = dayById(state.activeWorkoutLog.dayId) || nextDay();
+    const typeClass = toneClass(day);
     const totalSets = state.activeWorkoutLog.exercises.reduce((sum, e) => sum + e.sets.length, 0);
     const totalReps = state.activeWorkoutLog.exercises.reduce((sum, e) =>
       sum + e.sets.reduce((s, set) => s + (set.reps || 0), 0), 0);
     const durationMs = state.workoutStartTime ? Date.now() - state.workoutStartTime : 0;
     const durationMin = Math.round(durationMs / 60000);
-    const durationStr = durationMin > 0 ? `${durationMin} min · ` : '';
 
     el.innerHTML = `
-      <div class="complete-screen">
+      <div class="complete-screen ${typeClass}">
         <div class="complete-icon"><i class="ti ti-check"></i></div>
-        <div class="complete-title">FORGED</div>
-        <div class="complete-detail">${day.name} · ${day.label} complete<br>${durationStr}${totalSets} sets · ${totalReps} reps</div>
-        <button class="complete-btn" onclick="FORGE.finishAndGoHome()">DONE</button>
+        <div class="complete-title">Forged</div>
+        <div class="complete-detail">${day.name} · ${day.label} complete</div>
+        <div class="complete-stats">
+          <div><span class="cs-v">${durationMin > 0 ? durationMin : '—'}</span><span class="cs-l">Minutes</span></div>
+          <div><span class="cs-v">${totalSets}</span><span class="cs-l">Sets</span></div>
+          <div><span class="cs-v">${totalReps}</span><span class="cs-l">Reps</span></div>
+        </div>
+        <button class="complete-btn" onclick="FORGE.finishAndGoHome()">Done <i class="ti ti-check"></i></button>
       </div>
     `;
   }
@@ -1882,20 +2024,48 @@ Store.saveActiveWorkout({
   function startTimer(duration) {
     stopTimer();
     state.timerRemaining = duration;
+    state.timerTotal = duration;
     state.timerEndAt = Date.now() + duration * 1000;
     state.timerRunning = true;
+    syncTimerUI();
     state.timerInterval = setInterval(() => {
       state.timerRemaining = Math.max(0, Math.round((state.timerEndAt - Date.now()) / 1000));
-      const display = document.getElementById('timer-display');
-      if (display) display.textContent = formatTime(state.timerRemaining);
+      syncTimerUI();
       if (state.timerRemaining <= 0) {
         stopTimer();
         playTimerAlert();
-        // Update display
         const display2 = document.getElementById('timer-display');
         if (display2) display2.textContent = 'Done!';
       }
     }, 500);
+  }
+
+  // Updates the rest timer on screen without re-rendering the page, so
+  // numbers you have typed but not saved yet are left alone.
+  function syncTimerUI() {
+    const running = state.timerRunning;
+    const box = document.getElementById('rest-timer');
+    if (!box) return;
+    box.classList.toggle('active', running);
+    const display = document.getElementById('timer-display');
+    if (display && running) display.textContent = formatTime(state.timerRemaining);
+    const label = document.getElementById('timer-label');
+    if (label) label.textContent = running ? 'Resting' : 'Rest';
+    const badge = document.getElementById('timer-badge');
+    if (badge) badge.textContent = running ? 'Stop' : (badge.dataset.label || 'Start');
+    const ext = document.getElementById('timer-extend');
+    if (ext) ext.hidden = !running;
+    const bar = document.getElementById('timer-bar');
+    if (bar) bar.style.width = (running && state.timerTotal ? Math.round(100 * state.timerRemaining / state.timerTotal) : 0) + '%';
+  }
+
+  // +15s: pushes the end time out. Works because the timer is clock-based.
+  function extendTimer(sec) {
+    if (!state.timerRunning) return;
+    state.timerEndAt += sec * 1000;
+    state.timerTotal = (state.timerTotal || 0) + sec;
+    state.timerRemaining = Math.max(0, Math.round((state.timerEndAt - Date.now()) / 1000));
+    syncTimerUI();
   }
 
   function stopTimer() {
@@ -1904,12 +2074,14 @@ Store.saveActiveWorkout({
       state.timerInterval = null;
     }
     state.timerRunning = false;
+    syncTimerUI();
   }
 
   function toggleTimer(duration) {
     if (state.timerRunning) {
       stopTimer();
-      renderExercise(document.getElementById('main-content'));
+      const display = document.getElementById('timer-display');
+      if (display) display.textContent = formatTime(duration);
     } else {
       startTimer(duration);
     }
@@ -2338,10 +2510,11 @@ Store.saveActiveWorkout({
     const perSide = pc.plates.reduce((s, p) => s + p, 0);
     const total = pc.bar + perSide * 2;
     const day = activeDay();
-    const typeClass = day.type === 'hypertrophy' ? 'hypertrophy' : 'power';
+    const typeClass = toneClass(day);
 
     const content = document.getElementById('plate-panel-content');
     if (!content) return;
+    content.className = typeClass;   // plate calculator takes the day's accent
     content.innerHTML = `
       <div class="info-panel-title">Plate Calculator</div>
       <div class="plate-total font-mono">${total} <span class="plate-total-unit">${state.weightUnit}</span></div>
@@ -2424,17 +2597,27 @@ Store.saveActiveWorkout({
 
   // ===== TRACKER TAB =====
   function renderTracker(el) {
+    // Opening Tracker from the nav snaps the calendar to this month; paging
+    // with the arrows or editing a day keeps you where you were.
+    if (!state._calendarNavActive) {
+      const today = new Date();
+      state.calendarMonth = today.getMonth();
+      state.calendarYear = today.getFullYear();
+    }
+    state._calendarNavActive = false;
+
     el.innerHTML = `
-      <div class="section-header" style="margin-top:8px;">Workout tracker</div>
-      <div class="tracker-link-card">
-        <h2>FORGE Tracker</h2>
-        <p>Your detailed workout history, trends, charts, and analytics live in Google Sheets for deep review.</p>
-        <button class="tracker-open-btn" onclick="window.open('${FORGE_DATA.sheetsViewUrl}', '_blank')">
-          <i class="ti ti-external-link"></i> Open tracker
-        </button>
-      </div>
+      <h1 class="page-title">Tracker</h1>
+      ${renderCalendar()}
+      <button class="sheet-link-btn" onclick="window.open('${FORGE_DATA.sheetsViewUrl}', '_blank')">
+        <i class="ti ti-table"></i> Open Google Sheet <i class="ti ti-external-link"></i>
+      </button>
       ${renderRecentWorkouts()}
     `;
+  }
+
+  function openTracker() {
+    renderTab('tracker');
   }
 
   function renderRecentWorkouts() {
@@ -2446,18 +2629,18 @@ Store.saveActiveWorkout({
     allLogs.sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt));
     const recent = allLogs.slice(0, 10);
 
-    if (recent.length === 0) return '<div class="empty-state"><div class="empty-state-icon">📊</div><div class="empty-state-text">Complete a workout to see history here.</div></div>';
+    if (recent.length === 0) return '<div class="empty-state"><div class="empty-state-icon"><i class="ti ti-chart-bar"></i></div><div class="empty-state-text">Complete a workout to see history here.</div></div>';
 
-    let html = '<div class="section-header">Recent workouts</div>';
+    let html = '<section class="history-list"><div class="section-header">Recent workouts</div>';
     recent.forEach((log, idx) => {
-      const date = new Date(log.completedAt).toLocaleDateString();
-      const dayInfo = FORGE_DATA.cycleDays.find(d => d.id === log.dayId);
+      const date = new Date(log.completedAt).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+      const dayInfo = dayById(log.dayId);
+      const tone = dayInfo ? toneClass(dayInfo) : 'power';
       const totalSets = log.exercises.reduce((s, e) => s + e.sets.length, 0);
       const totalReps = log.exercises.reduce((s, e) =>
         s + e.sets.reduce((r, set) => r + (set.reps || 0), 0), 0);
       const durStr = log.durationMin > 0 ? ` · ${log.durationMin} min` : '';
-      const typeClass = dayInfo && dayInfo.type === 'hypertrophy' ? 'text-cyan' : 'text-amber';
-      const borderColor = dayInfo && dayInfo.type === 'hypertrophy' ? 'var(--cyan)' : 'var(--amber)';
+      const chip = `<span class="cal-code ${toneOf(dayInfo || { type: 'power' })}">${codeFor(log.dayId)}${SIZE_SUFFIX[log.size] || SIZE_SUFFIX.normal}</span>`;
 
       let detail = '';
       log.exercises.forEach(ex => {
@@ -2486,19 +2669,21 @@ Store.saveActiveWorkout({
       });
 
       html += `
-        <div class="workout-history-entry" style="margin-bottom:6px;">
-          <div class="wo-item" style="margin-bottom:0;border-left:2px solid ${borderColor};" onclick="FORGE.toggleWorkoutDetail(${idx})">
-            <div class="wo-item-info">
-              <div class="wo-item-name"><span class="${typeClass}">${dayInfo ? dayInfo.name : log.dayId}</span> <span class="text-muted" style="font-weight:400;font-size:12px;">${dayInfo ? dayInfo.label : ''}</span></div>
-              <div class="wo-item-detail">${date} · ${totalSets} sets · ${totalReps} reps${durStr}</div>
-            </div>
-            <div class="wo-item-status"><i class="ti ti-chevron-down" id="workout-chevron-${idx}" style="transition:transform 0.2s;"></i></div>
-          </div>
+        <div class="workout-history-entry ${tone}">
+          <button class="hist-row" onclick="FORGE.toggleWorkoutDetail(${idx})">
+            <span class="hist-top">
+              ${chip}
+              <span class="hist-name">${dayInfo ? dayInfo.name : log.dayId}</span>
+              <span class="hist-date">${date.toUpperCase()}</span>
+              <i class="ti ti-chevron-down" id="workout-chevron-${idx}"></i>
+            </span>
+            <span class="hist-meta">${totalSets} sets · ${totalReps} reps${durStr}</span>
+          </button>
           <div class="workout-detail" id="workout-detail-${idx}">${detail}</div>
         </div>
       `;
     });
-    return html;
+    return html + '</section>';
   }
 
   function toggleWorkoutDetail(idx) {
@@ -2516,9 +2701,9 @@ Store.saveActiveWorkout({
 
     if (all.length === 0) {
       el.innerHTML = `
-        <div class="section-header" style="margin-top:8px;">Personal records</div>
+        <h1 class="page-title">Personal records</h1>
         <div class="empty-state">
-          <div class="empty-state-icon">\ud83c\udfc6</div>
+          <div class="empty-state-icon"><i class="ti ti-trophy"></i></div>
           <div class="empty-state-text">Complete your first workout to start tracking PRs.</div>
         </div>
       `;
@@ -2544,16 +2729,18 @@ Store.saveActiveWorkout({
       </div>`;
 
     const section = (title, items, render) => items.length ? `
-      <div class="section-header" style="margin-top:18px;">${title}</div>
-      <div class="pr-list">${items.map(render).join('')}</div>` : '';
+      <section class="section-block">
+        <div class="section-header">${title}</div>
+        <div class="pr-list">${items.map(render).join('')}</div>
+      </section>` : '';
 
     el.innerHTML = `
-      <div class="section-header" style="margin-top:8px;">Personal records</div>
+      <h1 class="page-title">Personal records</h1>
 
       ${section('Weighted', weighted, pr => row(
         pr,
         prSetDisplay(pr),
-        `${new Date(pr.date).toLocaleDateString()}${pr.e1rm ? ` \u00b7 e1RM ${pr.e1rm} ${state.weightUnit}` : ''}`
+        `${new Date(pr.date).toLocaleDateString()}${pr.e1rm ? ` · e1RM ${pr.e1rm} ${state.weightUnit}` : ''}`
       ))}
 
       ${section('Bodyweight', byReps, pr => row(
@@ -2568,7 +2755,7 @@ Store.saveActiveWorkout({
         new Date(pr.date).toLocaleDateString()
       ))}
 
-      <div class="sheet-note" style="margin-top:18px;">
+      <div class="sheet-note">
         The big number is the best set you actually did. e1RM is an estimate of
         your one-rep max from that set, and it only appears at 12 reps or fewer
         because the formula stops meaning anything above that.
@@ -2580,41 +2767,34 @@ Store.saveActiveWorkout({
   function renderSettings(el) {
     const settings = Store.getSettings();
     el.innerHTML = `
-      <div class="section-header" style="margin-top:8px;">Settings</div>
-      <div style="display:flex;flex-direction:column;gap:12px;">
-        <div class="warmup-card">
-          <label style="font-size:13px;color:var(--text-secondary);display:block;margin-bottom:4px;">Body weight (${state.weightUnit})</label>
-          <input type="number" class="weight-input" id="settings-bw" value="${settings.bodyWeight}" inputmode="numeric" style="width:100%;">
+      <h1 class="page-title">Settings</h1>
+      <div class="settings-list">
+        <div class="warmup-card settings-field">
+          <label for="settings-bw">Body weight (${state.weightUnit})</label>
+          <input type="number" class="weight-input" id="settings-bw" value="${settings.bodyWeight}" inputmode="numeric">
         </div>
-        <div class="warmup-card">
-          <label style="font-size:13px;color:var(--text-secondary);display:block;margin-bottom:4px;">Next up</label>
-          <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:0.5px;">${nextDay().name}</div>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">
+        <div class="warmup-card settings-field">
+          <span class="settings-k">Next up</span>
+          <div class="settings-next">${nextDay().name}</div>
+          <div class="settings-help">
             Worked out from your log. To correct it, tap the day on the calendar and fix what you actually did.
           </div>
         </div>
-        <button class="start-btn power" onclick="FORGE.saveSettings()">SAVE SETTINGS</button>
-        <div style="margin-top:16px;">
-          <button class="action-btn" onclick="FORGE.exportData()" style="width:100%;justify-content:center;">
-            <i class="ti ti-download"></i> Export all data (JSON)
-          </button>
-        </div>
-        <div>
-          <input type="file" id="import-file" accept=".json" style="display:none;" onchange="FORGE.importData(this)">
-          <button class="action-btn" onclick="document.getElementById('import-file').click()" style="width:100%;justify-content:center;">
-            <i class="ti ti-upload"></i> Import data from JSON
-          </button>
-        </div>
-        <div>
-        <button class="action-btn" onclick="FORGE.clearToday()" style="width:100%;justify-content:center;color:var(--amber);">
-            <i class="ti ti-rotate-2"></i> Clear today's workout
-          </button>
-        </div>
-        <div>
-          <button class="action-btn" onclick="FORGE.clearData()" style="width:100%;justify-content:center;color:var(--red);">
-            <i class="ti ti-trash"></i> Clear all data
-          </button>
-        </div>
+        <button class="start-btn" onclick="FORGE.saveSettings()">Save settings</button>
+        <div class="section-header" style="margin-top:10px;">Data</div>
+        <button class="action-btn" onclick="FORGE.exportData()">
+          <i class="ti ti-download"></i> Export all data (JSON)
+        </button>
+        <input type="file" id="import-file" accept=".json" style="display:none;" onchange="FORGE.importData(this)">
+        <button class="action-btn" onclick="document.getElementById('import-file').click()">
+          <i class="ti ti-upload"></i> Import data from JSON
+        </button>
+        <button class="action-btn warn" onclick="FORGE.clearToday()">
+          <i class="ti ti-rotate-2"></i> Clear today's workout
+        </button>
+        <button class="action-btn danger" onclick="FORGE.clearData()">
+          <i class="ti ti-trash"></i> Clear all data
+        </button>
       </div>
     `;
   }
@@ -2623,10 +2803,12 @@ Store.saveActiveWorkout({
     const bw = parseFloat(document.getElementById('settings-bw').value) || 180;
     state.bodyWeight = bw;
 
-    Store.saveSettings({
-      bodyWeight: bw,
-      weightUnit: state.weightUnit
-    });
+    // Merge into the saved settings. The old version wrote only these two
+    // fields, which silently wiped the saved workout size.
+    const settings = Store.getSettings();
+    settings.bodyWeight = bw;
+    settings.weightUnit = state.weightUnit;
+    Store.saveSettings(settings);
 
     alert('Settings saved.');
     renderTab('home');
@@ -2782,6 +2964,8 @@ Store.saveActiveWorkout({
     finishAndGoHome,
     showInfo,
     toggleTimer: toggleTimer,
+    extendTimer,
+    openTracker,
     adjWeight,
     adjReps,
     adjSeconds,
