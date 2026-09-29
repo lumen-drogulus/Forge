@@ -86,9 +86,9 @@
   // restore, or a manual calendar edit. Nothing to count, nothing to drift.
 
   const CODE_FALLBACK = {
-    'push-a': 'PA', 'pull-a': 'RA', 'legs-a': 'LA',
-    'push-b': 'PB', 'pull-b': 'RB', 'legs-b': 'LB',
-    'rest': '\u2715'
+    'push-a': 'P1', 'pull-a': 'B1', 'legs-a': 'L1',
+    'push-b': 'P2', 'pull-b': 'B2', 'legs-b': 'L2',
+    'back-core': 'C', 'rest': '\u2715'
   };
   const SIZE_SUFFIX = { light: '\u2212', normal: '\u2731', extended: '+' };
 

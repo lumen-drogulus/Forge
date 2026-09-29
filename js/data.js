@@ -12,14 +12,15 @@ const FORGE_DATA = {
   sheetsViewUrl: "https://docs.google.com/spreadsheets/d/1vl2PzxKjfInOC5d4gD-vN1vIJY7xNirurmW7hoo56OU/edit",
   // Six training slots. Rest is NO LONGER a cycle position: it is a calendar
   // marker only, so marking a rest day never costs you a workout. "code" is
-  // what the calendar prints. Pull is R (for row) because PA/PA would collide.
+  // what the calendar prints: P/B/L for push/back/legs, 1/2 for the power and
+  // hypertrophy variants. C is reserved for the Back & Core alternate.
   cycleDays: [
-    { id: "push-a", name: "Push A", type: "power", label: "Power", color: "amber", code: "PA" },
-    { id: "pull-a", name: "Pull A", type: "power", label: "Power", color: "amber", code: "RA" },
-    { id: "legs-a", name: "Legs A", type: "power", label: "Power", color: "amber", code: "LA" },
-    { id: "push-b", name: "Push B", type: "hypertrophy", label: "Hypertrophy", color: "cyan", code: "PB" },
-    { id: "pull-b", name: "Pull B", type: "hypertrophy", label: "Hypertrophy", color: "cyan", code: "RB" },
-    { id: "legs-b", name: "Legs B", type: "hypertrophy", label: "Hypertrophy", color: "cyan", code: "LB" }
+    { id: "push-a", name: "Push A", type: "power", label: "Power", color: "amber", code: "P1" },
+    { id: "pull-a", name: "Pull A", type: "power", label: "Power", color: "amber", code: "B1" },
+    { id: "legs-a", name: "Legs A", type: "power", label: "Power", color: "amber", code: "L1" },
+    { id: "push-b", name: "Push B", type: "hypertrophy", label: "Hypertrophy", color: "cyan", code: "P2" },
+    { id: "pull-b", name: "Pull B", type: "hypertrophy", label: "Hypertrophy", color: "cyan", code: "B2" },
+    { id: "legs-b", name: "Legs B", type: "hypertrophy", label: "Hypertrophy", color: "cyan", code: "L2" }
   ],
 
   // Alternate days (light / calisthenics / back-core) land here in Phase 4.
