@@ -1,7 +1,7 @@
 // FORGE service worker
 // Bump CACHE_VERSION on every deploy. The activate handler deletes every
 // cache that doesn't match, which is what forces a clean slate.
-const CACHE_VERSION = 'v6';
+const CACHE_VERSION = 'v7';
 const CACHE_NAME = 'forge-' + CACHE_VERSION;
 
 const ASSETS = [
@@ -11,7 +11,8 @@ const ASSETS = [
   './js/data.js',
   './js/app.js',
   './manifest.json',
-  './logo.png'
+  './icon-192.png',
+  './favicon-32.png'
 ];
 
 // App code must be fresh when the network is up. Everything else (images,
