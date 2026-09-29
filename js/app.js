@@ -7,7 +7,7 @@
   // ===== STATE =====
   const state = {
     currentTab: 'home',
-    cycleIndex: 0,          // 0-7 position in the 8-day cycle
+    cycleIndex: 0,          // DERIVED from completedDays, never stored. See deriveCycleIndex().
     workoutActive: false,
     workoutPhase: 'overview', // overview | warmup | exercise | complete
     currentExerciseIndex: 0,
@@ -47,7 +47,6 @@
     savePRs(prs) { this.set('prs', prs); },
     getSettings() {
       return this.get('settings') || {
-        cycleIndex: 0,
         bodyWeight: 180,
         weightUnit: 'lbs',
         sheetsUrl: '',
@@ -81,49 +80,152 @@
   // so Push A / Push B days were saved as type "rest" and never rendered an X mark.
   // Logs always carried the correct dayId, so they are the source of truth.
   // Runs in milliseconds, is safe to repeat, and self-heals after a Sheets restore.
+  // ===== CYCLE DERIVATION =====
+  // Cycle position is no longer a stored counter. It is recomputed from what
+  // you actually logged, so it self-heals after a cache clear, a Sheets
+  // restore, or a manual calendar edit. Nothing to count, nothing to drift.
+
+  const CODE_FALLBACK = {
+    'push-a': 'PA', 'pull-a': 'RA', 'legs-a': 'LA',
+    'push-b': 'PB', 'pull-b': 'RB', 'legs-b': 'LB',
+    'rest': '\u2715'
+  };
+  const SIZE_SUFFIX = { light: '\u2212', normal: '\u2731', extended: '+' };
+
+  function cycleLen() { return FORGE_DATA.cycleDays.length; }
+
+  function dayById(id) {
+    return FORGE_DATA.cycleDays.find(d => d.id === id)
+        || (FORGE_DATA.alternates && FORGE_DATA.alternates[id])
+        || null;
+  }
+
+  // The day the ACTIVE workout belongs to. Every render used to look this up
+  // via cycleDays[cycleIndex], which silently renders the wrong exercises the
+  // moment the cycle moves mid-session or an alternate is chosen.
+  function activeDay() {
+    if (state.activeWorkoutLog) {
+      const d = dayById(state.activeWorkoutLog.dayId);
+      if (d) return d;
+    }
+    return FORGE_DATA.cycleDays[state.cycleIndex] || FORGE_DATA.cycleDays[0];
+  }
+
+  function nextDay() {
+    return FORGE_DATA.cycleDays[state.cycleIndex] || FORGE_DATA.cycleDays[0];
+  }
+
+  function codeFor(dayId) {
+    const d = dayById(dayId);
+    if (d && d.code) return d.code;
+    return CODE_FALLBACK[dayId] || (dayId || '?').slice(0, 2).toUpperCase();
+  }
+
+  function labelFor(entry) {
+    if (entry.type === 'rest') return '\u2715';
+    return codeFor(entry.dayId) + (SIZE_SUFFIX[entry.size] || SIZE_SUFFIX.normal);
+  }
+
+  // Sortable timestamp. Manual calendar entries get noon on their date so they
+  // order sanely against real workouts logged the same day.
+  function sortKey(c) {
+    return c.completedAt || (c.date + 'T12:00:00.000Z');
+  }
+
+  function entryUid(c) {
+    return (c.dayId || 'x') + '|' + sortKey(c);
+  }
+
+  // Walks backwards through everything you have done and finds the most recent
+  // entry that counts as a cycle slot. Rest days and bonus workouts carry
+  // slotId === null and are stepped over.
+  function deriveCycleIndex() {
+    const len = cycleLen();
+    if (!len) return 0;
+    const entries = Store.getCompletedDays()
+      .slice()
+      .sort((a, b) => (sortKey(a) < sortKey(b) ? -1 : 1));
+
+    for (let i = entries.length - 1; i >= 0; i--) {
+      const c = entries[i];
+      if (c.type === 'rest') continue;
+      if (c.slotId === null) continue;          // explicit bonus workout
+      const id = c.slotId || c.dayId;           // legacy entries have no slotId
+      const idx = FORGE_DATA.cycleDays.findIndex(d => d.id === id);
+      if (idx !== -1) return (idx + 1) % len;
+    }
+    return 0;
+  }
+
+  function refreshCycle() {
+    state.cycleIndex = deriveCycleIndex();
+  }
+
+  // Rebuilds the calendar from logs on every launch. Two changes from the old
+  // version: entries are no longer collapsed one-per-date (so two workouts in
+  // one day both survive), and anything flagged manual:true is preserved
+  // because no log backs it.
   function migrateCompletedDays() {
     const logs = Store.getLogs();
     const existing = Store.getCompletedDays();
     const todayStr = todayLocal();
-    const byDate = {};
+    const byUid = {};
 
-    // 1. Rebuild workout entries from logs (correct dayId, correct local date)
+    // 1. Rebuild workout entries from logs, one entry per logged session
     Object.keys(logs).forEach(dayId => {
-      const dayInfo = FORGE_DATA.cycleDays.find(d => d.id === dayId);
+      const dayInfo = dayById(dayId);
       if (!dayInfo) return;
       logs[dayId].forEach(log => {
         if (!log.completedAt) return;
-        const date = localDateOf(log.completedAt);
-        byDate[date] = { date: date, type: dayInfo.type, dayId: dayId };
+        const entry = {
+          date: localDateOf(log.completedAt),
+          type: dayInfo.type,
+          dayId: dayId,
+          size: log.size || 'normal',
+          completedAt: log.completedAt
+        };
+        if (log.slotId !== undefined) entry.slotId = log.slotId;
+        byUid[entryUid(entry)] = entry;
       });
     });
 
-    // 2. Keep genuine rest-day entries (skipRestDay always wrote dayId "rest").
-    //    Poisoned entries (dayId "rest-1"/"rest-2" from the offset bug) are dropped.
+    // 2. Preserve manual entries and legacy rest marks. Nothing in logs backs
+    //    these, so without this they would vanish on next launch.
     existing.forEach(c => {
-      if (c.dayId === 'rest' && !byDate[c.date]) {
-        byDate[c.date] = c;
+      if (c.manual || c.dayId === 'rest' || c.type === 'rest') {
+        const entry = {
+          date: c.date,
+          type: c.type === 'rest' ? 'rest' : c.type,
+          dayId: c.dayId || 'rest',
+          size: c.size || 'normal',
+          completedAt: sortKey(c),
+          manual: true
+        };
+        if (c.slotId !== undefined) entry.slotId = c.slotId;
+        else if (entry.type === 'rest') entry.slotId = null;
+        const uid = entryUid(entry);
+        if (!byUid[uid]) byUid[uid] = entry;
       }
     });
 
-    // 3. Drop future-dated ghosts (old UTC bug) and save, sorted by date
-    const rebuilt = Object.values(byDate)
+    // 3. Drop future-dated ghosts and save, ordered by time
+    const rebuilt = Object.values(byUid)
       .filter(c => c.date <= todayStr)
-      .sort((a, b) => (a.date < b.date ? -1 : 1));
+      .sort((a, b) => (sortKey(a) < sortKey(b) ? -1 : 1));
 
     Store.set('completedDays', rebuilt);
   }
-  
+
   // ===== INIT =====
   function init() {
     var settings = Store.getSettings();
-    state.cycleIndex = settings.cycleIndex || 0;
     state.bodyWeight = settings.bodyWeight || 180;
     state.weightUnit = settings.weightUnit || 'lbs';
     state.sheetsUrl = settings.sheetsUrl || FORGE_DATA.sheetsWebhookUrl || '';
 
-    // Rebuild calendar data from logs (fixes wrong types/dates from old bugs)
+    // Rebuild calendar data from logs, then derive cycle position from it
     migrateCompletedDays();
+    refreshCycle();
 
     // If localStorage is empty, try restoring from Sheets backup
     var logs = Store.getLogs();
@@ -131,11 +233,11 @@
       restoreFromSheets().then(function(restored) {
         if (restored) {
           var s = Store.getSettings();
-          state.cycleIndex = s.cycleIndex || 0;
           state.bodyWeight = s.bodyWeight || 180;
           state.weightUnit = s.weightUnit || 'lbs';
         }
         migrateCompletedDays(); // restored backup may contain old poisoned entries
+        refreshCycle();
         setupNavigation();
         restoreActiveWorkout();
         renderTab('home');
@@ -178,8 +280,10 @@
   function restoreActiveWorkout() {
     const saved = Store.getActiveWorkout();
     if (!saved || !saved.activeWorkoutLog) return;
-    // Verify the saved workout matches current cycle position
-    if (saved.cycleIndex !== state.cycleIndex) {
+    // Verify the saved workout still points at a day that exists. Comparing
+    // against cycle position was wrong: an alternate or a bonus workout is
+    // legitimately not the scheduled day.
+    if (!dayById(saved.activeWorkoutLog.dayId)) {
       Store.saveActiveWorkout(null);
       return;
     }
@@ -198,7 +302,7 @@
       return;
     }
 Store.saveActiveWorkout({
-      cycleIndex: state.cycleIndex,
+      dayId: state.activeWorkoutLog ? state.activeWorkoutLog.dayId : null,
       workoutPhase: state.workoutPhase,
       currentExerciseIndex: state.currentExerciseIndex,
       currentSetIndex: state.currentSetIndex,
@@ -268,10 +372,17 @@ Store.saveActiveWorkout({
       state.calendarYear = today.getFullYear();
     }
     state._calendarNavActive = false;
-    const day = FORGE_DATA.cycleDays[state.cycleIndex];
+    refreshCycle();
+    const day = nextDay();
     const workout = FORGE_DATA.workouts[day.id];
-    const isRest = day.type === 'rest';
-    const typeClass = day.type === 'hypertrophy' ? 'hypertrophy' : day.type === 'rest' ? 'rest' : 'power';
+    const typeClass = day.type === 'hypertrophy' ? 'hypertrophy' : 'power';
+
+    // Anything already logged today, so a second session shows context
+    const todayStr = todayLocal();
+    const todayEntries = Store.getCompletedDays().filter(c => c.date === todayStr);
+    const doneLine = todayEntries.length
+      ? `<div class="today-done-line">Already logged today: ${todayEntries.map(c => `<span class="today-done-chip">${labelFor(c)}</span>`).join(' ')}</div>`
+      : '';
 
     el.innerHTML = `
       <div class="section-header">Cycle position</div>
@@ -280,20 +391,21 @@ Store.saveActiveWorkout({
       <div class="today-card ${typeClass}">
         <div class="today-card-top">
           <div>
-            <div class="today-label ${typeClass}">Today</div>
+            <div class="today-label ${typeClass}">${todayEntries.length ? 'Next up' : 'Today'}</div>
             <div class="today-name">${day.name}</div>
-            <div class="today-meta">${isRest ? 'Recovery day' : `${day.label} · ${workout.exercises.length} exercises · ~${workout.estimatedMinutes} min`}</div>
+            <div class="today-meta">${day.label} · ${workout.exercises.length} exercises · ~${workout.estimatedMinutes} min</div>
           </div>
-          <div class="today-day-badge">Day ${state.cycleIndex + 1}/8</div>
+          <div class="today-day-badge">${codeFor(day.id)}</div>
         </div>
+        ${doneLine}
       </div>
-      ${buildActionArea(isRest, typeClass)}
+      ${buildActionArea(typeClass)}
     `;
   }
 
   // Decides what sits below the today card: a resume card if a workout is
   // in progress, otherwise the normal START / REST button.
-  function buildActionArea(isRest, typeClass) {
+  function buildActionArea(typeClass) {
     if (state.workoutActive && state.activeWorkoutLog) {
       const wLog = state.activeWorkoutLog;
       const wDay = FORGE_DATA.cycleDays.find(d => d.id === wLog.dayId);
@@ -311,16 +423,12 @@ Store.saveActiveWorkout({
         </div>
       `;
     }
-    if (isRest) {
-      return `
-        <button class="start-btn" style="background:var(--gray);color:var(--text-secondary);" onclick="FORGE.skipRestDay()">
-          COMPLETE REST DAY
-        </button>
-      `;
-    }
     return `
       <button class="start-btn ${typeClass}" onclick="FORGE.startWorkout()">
         START WORKOUT
+      </button>
+      <button class="rest-link-btn" onclick="FORGE.logRestToday()">
+        <i class="ti ti-moon"></i> Log today as a rest day
       </button>
     `;
   }
@@ -334,7 +442,7 @@ Store.saveActiveWorkout({
 
   function renderCycleBar() {
     return FORGE_DATA.cycleDays.map((d, i) => {
-      let cls = d.type === 'rest' ? 'rest' : d.type;
+      let cls = d.type;
       if (i < state.cycleIndex) cls += ' past';
       else if (i === state.cycleIndex) cls += ' current';
       else cls += ' future';
@@ -353,9 +461,17 @@ Store.saveActiveWorkout({
     const todayDate = today.getDate();
     const completedDays = Store.getCompletedDays();
 
-    const earliestDate = completedDays.length > 0
-      ? completedDays.reduce((min, c) => c.date < min ? c.date : min, completedDays[0].date)
-      : null;
+    // Group by date. A date can now hold several entries (a workout plus a
+    // bonus core session, say), which the old one-entry-per-date model
+    // silently overwrote.
+    const byDate = {};
+    completedDays.forEach(c => {
+      if (!byDate[c.date]) byDate[c.date] = [];
+      byDate[c.date].push(c);
+    });
+    Object.keys(byDate).forEach(d => {
+      byDate[d].sort((a, b) => (sortKey(a) < sortKey(b) ? -1 : 1));
+    });
 
     let grid = '<div class="calendar-grid">';
     ['S','M','T','W','T','F','S'].forEach(d => { grid += `<div class="cal-day-header">${d}</div>`; });
@@ -363,37 +479,39 @@ Store.saveActiveWorkout({
 
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-      const completed = completedDays.find(c => c.date === dateStr);
+      const entries = byDate[dateStr] || [];
       const thisDate = new Date(year, month, d);
       const isToday = isCurrentMonth && d === todayDate;
       const isPast = thisDate < new Date(today.getFullYear(), today.getMonth(), todayDate);
-      const isTracked = earliestDate && dateStr >= earliestDate;
 
       let cls = 'cal-day';
-      let content = `${d}`;
+      if (isToday) cls += ' today-ring';
 
-      if (isToday && completed && completed.type !== 'rest') {
-        cls += ` today ${completed.type === 'hypertrophy' ? 'hypertrophy-type' : 'power-type'}`;
-        content = '✕';
-      } else if (isToday) {
-        const dayType = FORGE_DATA.cycleDays[state.cycleIndex].type;
-        cls += ` today ${dayType === 'hypertrophy' ? 'hypertrophy-type' : dayType === 'rest' ? 'rest-type' : 'power-type'}`;
-      } else if (completed && completed.type !== 'rest') {
-        cls += completed.type === 'hypertrophy' ? ' done-hyp' : ' done-pwr';
-        content = '✕';
-      } else if (completed && completed.type === 'rest') {
-        cls += ' rest-done';
-      } else if (isPast && isTracked) {
-        cls += ' missed';
+      let body = `<div class="cal-date">${d}</div>`;
+
+      if (entries.length) {
+        // Two codes fit at phone width. Beyond that, show one and a count.
+        const shown = entries.length > 2 ? entries.slice(0, 1) : entries;
+        const chips = shown.map(c => {
+          const tone = c.type === 'rest' ? 'rest' : (c.type === 'hypertrophy' ? 'hyp' : 'pwr');
+          return `<span class="cal-code ${tone}">${labelFor(c)}</span>`;
+        }).join('');
+        const more = entries.length > 2 ? `<span class="cal-code more">+${entries.length - 1}</span>` : '';
+        body += `<div class="cal-codes">${chips}${more}</div>`;
       } else if (!isPast && !isToday) {
+        // Projected schedule: step forward through the cycle from today
         const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
         const daysAhead = Math.round((thisDate - todayMidnight) / (1000 * 60 * 60 * 24));
-        const futureIdx = ((state.cycleIndex + daysAhead) % 8 + 8) % 8;
-        const futureType = FORGE_DATA.cycleDays[futureIdx].type;
-        cls += ` future-planned ${futureType === 'hypertrophy' ? 'hypertrophy-type' : futureType === 'rest' ? 'rest-type' : 'power-type'}`;
+        const len = cycleLen();
+        const futureIdx = ((state.cycleIndex + daysAhead - 1) % len + len) % len;
+        const fd = FORGE_DATA.cycleDays[futureIdx];
+        const tone = fd.type === 'hypertrophy' ? 'hyp' : 'pwr';
+        body += `<div class="cal-codes"><span class="cal-code ${tone} projected">${codeFor(fd.id)}</span></div>`;
+      } else {
+        body += `<div class="cal-codes"><span class="cal-code blank">·</span></div>`;
       }
 
-      grid += `<div class="${cls}">${content}</div>`;
+      grid += `<div class="${cls}" onclick="FORGE.openDaySheet('${dateStr}')">${body}</div>`;
     }
     grid += '</div>';
 
@@ -409,9 +527,125 @@ Store.saveActiveWorkout({
           <div><span class="legend-dot" style="background:var(--amber)"></span>Power</div>
           <div><span class="legend-dot" style="background:var(--cyan)"></span>Hypertrophy</div>
           <div><span class="legend-dot" style="background:var(--gray)"></span>Rest</div>
+          <div style="margin-left:auto;color:var(--text-muted);">Tap a day to edit</div>
         </div>
       </div>
     `;
+  }
+
+  // ===== CALENDAR DAY SHEET =====
+  // Tap any day to record what actually happened. This is the override: the
+  // cycle follows the calendar, so correcting a day here corrects what the app
+  // serves you next.
+  function openDaySheet(dateStr) {
+    const todayStr = todayLocal();
+    if (dateStr > todayStr) return;   // nothing to record in the future
+
+    state._sheetDate = dateStr;
+    const entries = Store.getCompletedDays()
+      .filter(c => c.date === dateStr)
+      .sort((a, b) => (sortKey(a) < sortKey(b) ? -1 : 1));
+
+    const pretty = new Date(dateStr + 'T12:00:00').toLocaleDateString('default',
+      { weekday: 'long', month: 'short', day: 'numeric' });
+
+    const logged = entries.length ? `
+      <div class="sheet-section-label">Logged</div>
+      ${entries.map(c => {
+        const d = dayById(c.dayId);
+        const nm = c.type === 'rest' ? 'Rest day' : (d ? d.name : c.dayId);
+        const sz = c.type === 'rest' ? '' : ` · ${c.size || 'normal'}`;
+        return `
+          <div class="sheet-row">
+            <div>
+              <div class="sheet-row-name">${nm}</div>
+              <div class="sheet-row-detail">${labelFor(c)}${sz}${c.manual ? ' · added manually' : ''}</div>
+            </div>
+            <button class="sheet-del" onclick="FORGE.clearDayEntry('${entryUid(c).replace(/'/g, "\\'")}')">
+              <i class="ti ti-trash"></i>
+            </button>
+          </div>`;
+      }).join('')}
+    ` : '<div class="sheet-empty">Nothing logged this day.</div>';
+
+    const options = FORGE_DATA.cycleDays.map(d => `
+      <button class="sheet-add ${d.type === 'hypertrophy' ? 'hyp' : 'pwr'}"
+              onclick="FORGE.markDay('${d.id}')">${codeFor(d.id)} ${d.name}</button>
+    `).join('');
+
+    document.getElementById('info-panel-content').innerHTML = `
+      <div class="info-panel-title">${pretty}</div>
+      ${logged}
+      <div class="sheet-section-label">Add</div>
+      <button class="sheet-add rest" onclick="FORGE.markDay('rest')">\u2715 Rest day</button>
+      <div class="sheet-add-grid">${options}</div>
+      <div class="sheet-note">Manually added workouts count toward your cycle position. Rest days do not.</div>
+    `;
+    document.getElementById('info-panel').classList.add('open');
+    document.getElementById('info-backdrop').classList.add('open');
+  }
+
+  function closeDaySheet() {
+    document.getElementById('info-panel').classList.remove('open');
+    document.getElementById('info-backdrop').classList.remove('open');
+    state._sheetDate = null;
+  }
+
+  function markDay(dayId) {
+    const dateStr = state._sheetDate;
+    if (!dateStr) return;
+    const isRest = dayId === 'rest';
+    const d = isRest ? null : dayById(dayId);
+    const completed = Store.getCompletedDays();
+
+    // Noon on the chosen date keeps ordering sane against same-day workouts
+    const stamp = new Date(dateStr + 'T12:00:00').toISOString();
+
+    completed.push({
+      date: dateStr,
+      type: isRest ? 'rest' : d.type,
+      dayId: isRest ? 'rest' : dayId,
+      size: 'normal',
+      completedAt: stamp,
+      manual: true,
+      slotId: isRest ? null : dayId
+    });
+    completed.sort((a, b) => (sortKey(a) < sortKey(b) ? -1 : 1));
+    Store.set('completedDays', completed);
+
+    refreshCycle();
+    state._calendarNavActive = true;
+    openDaySheet(dateStr);
+    renderHome(document.getElementById('main-content'));
+  }
+
+  function clearDayEntry(uid) {
+    const completed = Store.getCompletedDays();
+    const target = completed.find(c => entryUid(c) === uid);
+    if (!target) return;
+
+    // A logged workout also owns rows in forge_logs. Drop those too, or the
+    // next launch rebuilds the entry straight back onto the calendar.
+    if (!target.manual && target.dayId && target.dayId !== 'rest') {
+      const logs = Store.getLogs();
+      if (logs[target.dayId]) {
+        logs[target.dayId] = logs[target.dayId].filter(l => l.completedAt !== target.completedAt);
+        if (!logs[target.dayId].length) delete logs[target.dayId];
+        Store.saveLogs(logs);
+      }
+    }
+
+    Store.set('completedDays', completed.filter(c => entryUid(c) !== uid));
+    refreshCycle();
+    state._calendarNavActive = true;
+    openDaySheet(state._sheetDate);
+    renderHome(document.getElementById('main-content'));
+  }
+
+  function logRestToday() {
+    state._sheetDate = todayLocal();
+    markDay('rest');
+    closeDaySheet();
   }
 
   function calendarPrev() {
@@ -430,7 +664,7 @@ Store.saveActiveWorkout({
 
   // ===== WORKOUT FLOW =====
   function startWorkout() {
-    const day = FORGE_DATA.cycleDays[state.cycleIndex];
+    const day = nextDay();
     const workout = FORGE_DATA.workouts[day.id];
     if (!workout) return;
 
@@ -442,6 +676,8 @@ Store.saveActiveWorkout({
     state.workoutStartTime = Date.now(); // start the duration clock
     state.activeWorkoutLog = {
       dayId: day.id,
+      slotId: day.id,        // which cycle slot this counts as; null = bonus
+      size: 'normal',        // light | normal | extended (Phase 4)
       date: new Date().toISOString(),
       exercises: workout.exercises.map(ex => ({
         id: ex.id,
@@ -465,7 +701,7 @@ Store.saveActiveWorkout({
   }
 
   function renderWorkoutOverview(el) {
-    const day = FORGE_DATA.cycleDays[state.cycleIndex];
+    const day = activeDay();
     const workout = FORGE_DATA.workouts[day.id];
     const typeClass = day.type === 'hypertrophy' ? 'hypertrophy' : 'power';
 
@@ -515,7 +751,7 @@ Store.saveActiveWorkout({
   }
 
   function renderWarmup(el) {
-    const day = FORGE_DATA.cycleDays[state.cycleIndex];
+    const day = activeDay();
     const workout = FORGE_DATA.workouts[day.id];
     const typeClass = day.type === 'hypertrophy' ? 'hypertrophy' : 'power';
 
@@ -547,7 +783,7 @@ Store.saveActiveWorkout({
   }
 
   function renderExercise(el) {
-    const day = FORGE_DATA.cycleDays[state.cycleIndex];
+    const day = activeDay();
     const workout = FORGE_DATA.workouts[day.id];
     const ex = workout.exercises[state.currentExerciseIndex];
     const log = state.activeWorkoutLog.exercises[state.currentExerciseIndex];
@@ -754,7 +990,7 @@ Store.saveActiveWorkout({
 
   // ===== SET LOGGING =====
   function saveSet() {
-    const day = FORGE_DATA.cycleDays[state.cycleIndex];
+    const day = activeDay();
     const workout = FORGE_DATA.workouts[day.id];
     const ex = workout.exercises[state.currentExerciseIndex];
     const log = state.activeWorkoutLog.exercises[state.currentExerciseIndex];
@@ -831,7 +1067,7 @@ Store.saveActiveWorkout({
   }
 
   function updateSet() {
-    const day = FORGE_DATA.cycleDays[state.cycleIndex];
+    const day = activeDay();
     const workout = FORGE_DATA.workouts[day.id];
     const ex = workout.exercises[state.currentExerciseIndex];
     const log = state.activeWorkoutLog.exercises[state.currentExerciseIndex];
@@ -980,7 +1216,7 @@ Store.saveActiveWorkout({
   function completeWorkout() {
     state.workoutPhase = 'complete';
     saveWorkoutToStorage();
-    advanceCycle();
+    refreshCycle();
     renderWorkoutView();
   }
 
@@ -995,7 +1231,7 @@ Store.saveActiveWorkout({
   }
 
   function renderComplete(el) {
-    const day = FORGE_DATA.cycleDays[(state.cycleIndex + 7) % 8]; // previous day since we already advanced
+    const day = dayById(state.activeWorkoutLog.dayId) || nextDay();
     const totalSets = state.activeWorkoutLog.exercises.reduce((sum, e) => sum + e.sets.length, 0);
     const totalReps = state.activeWorkoutLog.exercises.reduce((sum, e) =>
       sum + e.sets.reduce((s, set) => s + (set.reps || 0), 0), 0);
@@ -1031,24 +1267,16 @@ Store.saveActiveWorkout({
     persistWorkoutState();
   }
 
-  function skipRestDay() {
-    const today = todayLocal();
-    const completed = Store.getCompletedDays();
-    completed.push({ date: today, type: 'rest', dayId: 'rest' });
-    Store.set('completedDays', completed);
-    advanceCycle();
-    renderTab('home');
-  }
-
   // ===== STORAGE & SYNC =====
   function saveWorkoutToStorage() {
     const logs = Store.getLogs();
     const dateKey = todayLocal();
     const durationMs = state.workoutStartTime ? Date.now() - state.workoutStartTime : 0;
     const durationMin = Math.round(durationMs / 60000);
+    const completedAt = new Date().toISOString();
     const logEntry = {
       ...state.activeWorkoutLog,
-      completedAt: new Date().toISOString(),
+      completedAt: completedAt,
       durationMin: durationMin
     };
 
@@ -1056,22 +1284,24 @@ Store.saveActiveWorkout({
     logs[state.activeWorkoutLog.dayId].push(logEntry);
     Store.saveLogs(logs);
 
-    // Save completed day for calendar
+    // Save completed day for calendar. Keyed by timestamp, not date, so a
+    // second session the same day sits alongside the first instead of over it.
     const completed = Store.getCompletedDays();
-    const day = FORGE_DATA.cycleDays[state.cycleIndex];
-    completed.push({ date: dateKey, type: day.type, dayId: day.id });
+    const day = dayById(state.activeWorkoutLog.dayId) || nextDay();
+    completed.push({
+      date: dateKey,
+      type: day.type,
+      dayId: day.id,
+      size: state.activeWorkoutLog.size || 'normal',
+      completedAt: completedAt,
+      slotId: state.activeWorkoutLog.slotId !== undefined ? state.activeWorkoutLog.slotId : day.id
+    });
+    completed.sort((a, b) => (sortKey(a) < sortKey(b) ? -1 : 1));
     Store.set('completedDays', completed);
 
     // Sync to Google Sheets
     syncToSheets(logEntry);
     backupToSheets();
-  }
-
-  function advanceCycle() {
-    state.cycleIndex = (state.cycleIndex + 1) % 8;
-    const settings = Store.getSettings();
-    settings.cycleIndex = state.cycleIndex;
-    Store.saveSettings(settings);
   }
 
   function syncToSheets(logEntry) {
@@ -1379,7 +1609,7 @@ Store.saveActiveWorkout({
   }
 
   function setBWMode(mode) {
-    const day = FORGE_DATA.cycleDays[state.cycleIndex];
+    const day = activeDay();
     const workout = FORGE_DATA.workouts[day.id];
     const ex = workout.exercises[state.currentExerciseIndex];
     ex.weightMode = mode;
@@ -1489,7 +1719,7 @@ Store.saveActiveWorkout({
     const pc = state.plateCalc;
     const perSide = pc.plates.reduce((s, p) => s + p, 0);
     const total = pc.bar + perSide * 2;
-    const day = FORGE_DATA.cycleDays[state.cycleIndex];
+    const day = activeDay();
     const typeClass = day.type === 'hypertrophy' ? 'hypertrophy' : 'power';
 
     const content = document.getElementById('plate-panel-content');
@@ -1549,7 +1779,7 @@ Store.saveActiveWorkout({
 
   // ===== INFO PANEL =====
   function showInfo() {
-    const day = FORGE_DATA.cycleDays[state.cycleIndex];
+    const day = activeDay();
     const workout = FORGE_DATA.workouts[day.id];
     const ex = workout.exercises[state.currentExerciseIndex];
 
@@ -1574,6 +1804,7 @@ Store.saveActiveWorkout({
   function closeInfoPanel() {
     document.getElementById('info-panel').classList.remove('open');
     document.getElementById('info-backdrop').classList.remove('open');
+    state._sheetDate = null;   // the day sheet shares this panel
   }
 
   // ===== TRACKER TAB =====
@@ -1711,8 +1942,11 @@ Store.saveActiveWorkout({
           <input type="number" class="weight-input" id="settings-bw" value="${settings.bodyWeight}" inputmode="numeric" style="width:100%;">
         </div>
         <div class="warmup-card">
-          <label style="font-size:13px;color:var(--text-secondary);display:block;margin-bottom:4px;">Current cycle day (1-8)</label>
-          <input type="number" class="weight-input" id="settings-cycle" value="${state.cycleIndex + 1}" min="1" max="8" inputmode="numeric" style="width:100%;">
+          <label style="font-size:13px;color:var(--text-secondary);display:block;margin-bottom:4px;">Next up</label>
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:0.5px;">${nextDay().name}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">
+            Worked out from your log. To correct it, tap the day on the calendar and fix what you actually did.
+          </div>
         </div>
         <button class="start-btn power" onclick="FORGE.saveSettings()">SAVE SETTINGS</button>
         <div style="margin-top:16px;">
@@ -1742,13 +1976,10 @@ Store.saveActiveWorkout({
 
   function saveSettings() {
     const bw = parseFloat(document.getElementById('settings-bw').value) || 180;
-    const cycle = parseInt(document.getElementById('settings-cycle').value) || 1;
     state.bodyWeight = bw;
-    state.cycleIndex = Math.max(0, Math.min(7, cycle - 1));
 
     Store.saveSettings({
       bodyWeight: bw,
-      cycleIndex: state.cycleIndex,
       weightUnit: state.weightUnit
     });
 
@@ -1806,13 +2037,13 @@ Store.saveActiveWorkout({
         if (data.completedDays) Store.set('completedDays', data.completedDays);
         if (data.settings) {
           Store.saveSettings(data.settings);
-          state.cycleIndex = data.settings.cycleIndex || 0;
           state.bodyWeight = data.settings.bodyWeight || 180;
           state.weightUnit = data.settings.weightUnit || 'lbs';
           state.sheetsUrl = data.settings.sheetsUrl || '';
         }
 
         migrateCompletedDays(); // imported backups may contain old poisoned entries
+        refreshCycle();
         alert('Data imported successfully.');
         renderTab('home');
       } catch (err) {
@@ -1826,10 +2057,10 @@ Store.saveActiveWorkout({
   function clearToday() {
     const today = todayLocal();
     const completed = Store.getCompletedDays();
-    const todayEntry = completed.find(c => c.date === today);
+    const todayEntries = completed.filter(c => c.date === today);
 
-    // If there's an active workout but nothing completed yet, just kill the session
-    if (!todayEntry && state.workoutActive) {
+    // Active session with nothing saved yet: just kill the session
+    if (!todayEntries.length && state.workoutActive) {
       if (confirm('Cancel the current workout in progress?')) {
         resetWorkoutState();
         renderTab('home');
@@ -1837,46 +2068,39 @@ Store.saveActiveWorkout({
       return;
     }
 
-    if (!todayEntry) {
-      alert('No workout logged today.');
+    if (!todayEntries.length) {
+      alert('Nothing logged today.');
       return;
     }
 
-    if (confirm('Clear today\'s workout? This removes the log and rolls back your cycle position.')) {
-      // Remove from completed days
-      const filtered = completed.filter(c => c.date !== today);
-      Store.set('completedDays', filtered);
-
-      // Remove from logs
+    const names = todayEntries.map(c => labelFor(c)).join(', ');
+    if (confirm(`Clear everything logged today (${names})? Cycle position recalculates on its own.`)) {
       const logs = Store.getLogs();
-      if (logs[todayEntry.dayId]) {
-        // Compare LOCAL dates. completedAt is stored in UTC, so an evening
-        // workout's raw string starts with tomorrow's date and never matched.
-        logs[todayEntry.dayId] = logs[todayEntry.dayId].filter(
-          log => !log.completedAt || localDateOf(log.completedAt) !== today
-        );
-        if (logs[todayEntry.dayId].length === 0) delete logs[todayEntry.dayId];
-        Store.saveLogs(logs);
-      }
+      todayEntries.forEach(c => {
+        if (c.dayId && c.dayId !== 'rest' && logs[c.dayId]) {
+          // Compare LOCAL dates. completedAt is UTC, so an evening workout's
+          // raw string starts with tomorrow's date and never matched.
+          logs[c.dayId] = logs[c.dayId].filter(
+            log => !log.completedAt || localDateOf(log.completedAt) !== today
+          );
+          if (!logs[c.dayId].length) delete logs[c.dayId];
+        }
+      });
+      Store.saveLogs(logs);
+      Store.set('completedDays', completed.filter(c => c.date !== today));
 
-      // Roll back cycle index
-      state.cycleIndex = (state.cycleIndex + 7) % 8;
-      const settings = Store.getSettings();
-      settings.cycleIndex = state.cycleIndex;
-      Store.saveSettings(settings);
-
-      // Clear any active workout
+      refreshCycle();          // no manual rollback; it recomputes
       resetWorkoutState();
       renderTab('home');
     }
   }
-  
+
   function clearData() {
     if (confirm('This will delete ALL workout data, PRs, and settings. Are you sure?')) {
       if (confirm('Really? This cannot be undone.')) {
         localStorage.clear();
-        state.cycleIndex = 0;
         state.bodyWeight = 180;
+        refreshCycle();
         resetWorkoutState();
         renderTab('home');
       }
@@ -1886,7 +2110,11 @@ Store.saveActiveWorkout({
   // ===== PUBLIC API =====
   window.FORGE = {
     startWorkout,
-    skipRestDay,
+    logRestToday,
+    openDaySheet,
+    closeDaySheet,
+    markDay,
+    clearDayEntry,
     calendarPrev,
     calendarNext,
     goToWarmup,

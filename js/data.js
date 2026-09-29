@@ -10,16 +10,21 @@ const FORGE_DATA = {
   programName: "PH-PPL",
   sheetsWebhookUrl: "https://script.google.com/macros/s/AKfycbz3em4yss9biz9uf3Bx2yhh41eTzJ_6Zo_pry_ReiPkcn4ORalTL8F9khZIDYJydwHztA/exec",
   sheetsViewUrl: "https://docs.google.com/spreadsheets/d/1vl2PzxKjfInOC5d4gD-vN1vIJY7xNirurmW7hoo56OU/edit",
+  // Six training slots. Rest is NO LONGER a cycle position: it is a calendar
+  // marker only, so marking a rest day never costs you a workout. "code" is
+  // what the calendar prints. Pull is R (for row) because PA/PA would collide.
   cycleDays: [
-    { id: "push-a", name: "Push A", type: "power", label: "Power", color: "amber" },
-    { id: "pull-a", name: "Pull A", type: "power", label: "Power", color: "amber" },
-    { id: "legs-a", name: "Legs A", type: "power", label: "Power", color: "amber" },
-    { id: "rest-1", name: "Rest", type: "rest", label: "Recovery", color: "gray" },
-    { id: "push-b", name: "Push B", type: "hypertrophy", label: "Hypertrophy", color: "cyan" },
-    { id: "pull-b", name: "Pull B", type: "hypertrophy", label: "Hypertrophy", color: "cyan" },
-    { id: "legs-b", name: "Legs B", type: "hypertrophy", label: "Hypertrophy", color: "cyan" },
-    { id: "rest-2", name: "Rest", type: "rest", label: "Recovery", color: "gray" }
+    { id: "push-a", name: "Push A", type: "power", label: "Power", color: "amber", code: "PA" },
+    { id: "pull-a", name: "Pull A", type: "power", label: "Power", color: "amber", code: "RA" },
+    { id: "legs-a", name: "Legs A", type: "power", label: "Power", color: "amber", code: "LA" },
+    { id: "push-b", name: "Push B", type: "hypertrophy", label: "Hypertrophy", color: "cyan", code: "PB" },
+    { id: "pull-b", name: "Pull B", type: "hypertrophy", label: "Hypertrophy", color: "cyan", code: "RB" },
+    { id: "legs-b", name: "Legs B", type: "hypertrophy", label: "Hypertrophy", color: "cyan", code: "LB" }
   ],
+
+  // Alternate days (light / calisthenics / back-core) land here in Phase 4.
+  // deriveCycleIndex() and dayById() already read this shape.
+  alternates: {},
 
   // RPE descriptions for reference tooltips
   rpeGuide: {
