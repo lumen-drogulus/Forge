@@ -527,10 +527,53 @@ Store.saveActiveWorkout({
           <div><span class="legend-dot" style="background:var(--amber)"></span>Power</div>
           <div><span class="legend-dot" style="background:var(--cyan)"></span>Hypertrophy</div>
           <div><span class="legend-dot" style="background:var(--gray)"></span>Rest</div>
-          <div style="margin-left:auto;color:var(--text-muted);">Tap a day to edit</div>
+          <button class="legend-key-btn" onclick="FORGE.openKeySheet()">
+            <i class="ti ti-help-circle"></i> Key
+          </button>
         </div>
       </div>
     `;
+  }
+
+  // Full code key. Lives behind a button rather than on the home screen,
+  // because a permanent nine-row legend costs more space than it earns.
+  function openKeySheet() {
+    const rows = FORGE_DATA.cycleDays.map(d => {
+      const tone = d.type === 'hypertrophy' ? 'hyp' : 'pwr';
+      return `<div class="key-row"><span class="cal-code ${tone}">${codeFor(d.id)}</span><span>${d.name}</span></div>`;
+    }).join('');
+
+    document.getElementById('info-panel-content').innerHTML = `
+      <div class="info-panel-title">Calendar key</div>
+
+      <div class="sheet-section-label">Workout</div>
+      <div class="key-grid">
+        ${rows}
+        <div class="key-row"><span class="cal-code rest">\u2715</span><span>Rest day</span></div>
+      </div>
+
+      <div class="sheet-section-label">Size</div>
+      <div class="key-grid">
+        <div class="key-row"><span class="cal-code pwr">\u2212</span><span>Light \u00b7 ~30 min</span></div>
+        <div class="key-row"><span class="cal-code pwr">\u2731</span><span>Normal \u00b7 ~60 min</span></div>
+        <div class="key-row"><span class="cal-code pwr">+</span><span>Extended \u00b7 ~90 min</span></div>
+      </div>
+
+      <div class="sheet-section-label">Colour</div>
+      <div class="key-grid">
+        <div class="key-row"><span class="key-swatch" style="background:var(--amber)"></span><span>Power</span></div>
+        <div class="key-row"><span class="key-swatch" style="background:var(--cyan)"></span><span>Hypertrophy</span></div>
+        <div class="key-row"><span class="key-swatch" style="background:var(--gray)"></span><span>Rest</span></div>
+      </div>
+
+      <div class="sheet-note">
+        So <strong>B1\u2212</strong> is a light Pull A, and <strong>L2+</strong> is an extended Legs B.
+        A day can hold more than one entry; a cell showing <strong>+2</strong> has more than fits.
+        Faded codes on future days are the projected schedule, not something you did.
+      </div>
+    `;
+    document.getElementById('info-panel').classList.add('open');
+    document.getElementById('info-backdrop').classList.add('open');
   }
 
   // ===== CALENDAR DAY SHEET =====
@@ -2113,6 +2156,7 @@ Store.saveActiveWorkout({
     logRestToday,
     openDaySheet,
     closeDaySheet,
+    openKeySheet,
     markDay,
     clearDayEntry,
     calendarPrev,
