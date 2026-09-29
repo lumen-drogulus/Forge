@@ -1,7 +1,7 @@
 // FORGE service worker
 // Bump CACHE_VERSION on every deploy. The activate handler deletes every
 // cache that doesn't match, which is what forces a clean slate.
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v3';
 const CACHE_NAME = 'forge-' + CACHE_VERSION;
 
 const ASSETS = [
@@ -45,8 +45,16 @@ self.addEventListener('fetch', e => {
   if (navigating || isAppCode(url)) {
     // NETWORK FIRST. Online, you always get the deployed version. Offline,
     // you fall back to the last copy that worked. No more one-load lag.
+    // cache:'no-store' bypasses the BROWSER's HTTP cache, not just this
+    // worker's. GitHub Pages sends max-age=600 on assets, so without it the
+    // browser serves a ten-minute-old copy before the network is consulted
+    // and a deploy appears to do nothing.
+    const fresh = new Request(e.request.url, {
+      cache: 'no-store',
+      credentials: 'same-origin'
+    });
     e.respondWith(
-      fetch(e.request)
+      fetch(fresh)
         .then(response => {
           if (response && response.status === 200) {
             const clone = response.clone();
