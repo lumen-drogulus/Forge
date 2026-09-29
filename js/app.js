@@ -36,14 +36,50 @@
     plateCalc: { bar: 45, plates: [] }
   };
 
+  // ===== SANDBOX =====
+  // A throwaway copy of your data for showing the app off. While it's on, every
+  // read and write goes to the copy, held in sessionStorage: it survives a reload
+  // but dies when the app is closed. Real localStorage is never touched and
+  // nothing syncs to Sheets. On or off is decided once, at boot.
+  const Sandbox = {
+    on: false,
+    data: null,      // { key: JSON string }, mirrors how localStorage holds it
+    frozen: false,   // set just before a reload so nothing writes on the way out
+    load() {
+      try {
+        const raw = sessionStorage.getItem('forge_sandbox');
+        if (raw) { this.data = JSON.parse(raw); this.on = true; }
+      } catch (e) {}
+    },
+    save() {
+      try { sessionStorage.setItem('forge_sandbox', JSON.stringify(this.data)); } catch (e) {}
+    }
+  };
+  Sandbox.load();
+
   // ===== STORAGE =====
   const Store = {
     get(key) {
-      try { return JSON.parse(localStorage.getItem('forge_' + key)); }
+      try {
+        const raw = Sandbox.on ? Sandbox.data[key] : localStorage.getItem('forge_' + key);
+        return raw == null ? null : JSON.parse(raw);
+      }
       catch { return null; }
     },
     set(key, val) {
+      if (Sandbox.frozen) return;
+      if (Sandbox.on) { Sandbox.data[key] = JSON.stringify(val); Sandbox.save(); return; }
       localStorage.setItem('forge_' + key, JSON.stringify(val));
+    },
+    remove(key) {
+      if (Sandbox.frozen) return;
+      if (Sandbox.on) { delete Sandbox.data[key]; Sandbox.save(); return; }
+      localStorage.removeItem('forge_' + key);
+    },
+    clearAll() {
+      if (Sandbox.frozen) return;
+      if (Sandbox.on) { Sandbox.data = {}; Sandbox.save(); return; }
+      localStorage.clear();
     },
     getLogs() { return this.get('logs') || {}; },
     saveLogs(logs) { this.set('logs', logs); },
@@ -63,7 +99,7 @@
     getActiveWorkout() { return this.get('activeWorkout'); },
     saveActiveWorkout(data) {
       if (data) this.set('activeWorkout', data);
-      else localStorage.removeItem('forge_activeWorkout');
+      else this.remove('activeWorkout');
     }
   };
 
@@ -317,6 +353,8 @@
     state.workoutSize = settings.workoutSize || 'normal';
     state.weightUnit = settings.weightUnit || 'lbs';
     state.sheetsUrl = settings.sheetsUrl || FORGE_DATA.sheetsWebhookUrl || '';
+    if (Sandbox.on) state.sheetsUrl = '';   // sandbox never talks to Sheets
+    setupSandboxChrome();
 
     // Rebuild calendar data from logs, then derive cycle position from it
     migrateCompletedDays();
@@ -325,7 +363,7 @@
 
     // If localStorage is empty, try restoring from Sheets backup
     var logs = Store.getLogs();
-    if (Object.keys(logs).length === 0 && FORGE_DATA.sheetsWebhookUrl) {
+    if (Object.keys(logs).length === 0 && FORGE_DATA.sheetsWebhookUrl && !Sandbox.on) {
       restoreFromSheets().then(function(restored) {
         if (restored) {
           var s = Store.getSettings();
@@ -419,6 +457,55 @@ Store.saveActiveWorkout({
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js').catch(() => {});
     }
+  }
+
+  // ===== SANDBOX: ENTER, EXIT, CHROME =====
+  // Hidden door: tap the FORGE logo in the header five times, quickly.
+  let brandTaps = [];
+  function onBrandTap() {
+    const now = Date.now();
+    brandTaps = brandTaps.filter(t => now - t < 1500);
+    brandTaps.push(now);
+    if (brandTaps.length < 5) return;
+    brandTaps = [];
+    if (Sandbox.on) return;   // already in; the header pill is the way out
+    if (confirm('Enter sandbox?\n\nA copy of your data to play with. Nothing you log is saved or synced. Exit from the header.')) {
+      enterSandbox();
+    }
+  }
+
+  function enterSandbox() {
+    persistWorkoutState();   // capture a live workout in the real store first
+    const copy = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.indexOf('forge_') === 0) copy[k.slice(6)] = localStorage.getItem(k);
+    }
+    try { sessionStorage.setItem('forge_sandbox', JSON.stringify(copy)); }
+    catch (e) { alert('Could not start the sandbox on this device.'); return; }
+    Sandbox.frozen = true;   // the reload below must not write anything
+    location.reload();
+  }
+
+  function exitSandbox() {
+    Sandbox.frozen = true;   // freeze first: the unload handler tries to persist
+    try { sessionStorage.removeItem('forge_sandbox'); } catch (e) {}
+    location.reload();       // boots clean from real data, onto Home
+  }
+
+  function setupSandboxChrome() {
+    const brand = document.querySelector('.header-brand');
+    if (brand) brand.addEventListener('click', onBrandTap);
+    if (!Sandbox.on) return;
+    document.body.classList.add('sandbox');
+    const header = document.querySelector('.header');
+    if (!header || document.getElementById('sandbox-pill')) return;
+    const pill = document.createElement('button');
+    pill.id = 'sandbox-pill';
+    pill.className = 'sandbox-pill';
+    pill.innerHTML = '<i class="ti ti-flask"></i> Sandbox <span class="sandbox-x"><i class="ti ti-x"></i> Exit</span>';
+    pill.addEventListener('click', exitSandbox);
+    header.appendChild(pill);
   }
 
   // ===== NAVIGATION =====
@@ -1743,7 +1830,7 @@ Store.saveActiveWorkout({
   }
 
   function syncToSheets(logEntry) {
-    if (!state.sheetsUrl) return;
+    if (!state.sheetsUrl || Sandbox.on) return;
     try {
      const rows = [];
       logEntry.exercises.forEach(ex => {
@@ -1768,7 +1855,7 @@ Store.saveActiveWorkout({
   }
 
   function backupToSheets() {
-    if (!state.sheetsUrl) return;
+    if (!state.sheetsUrl || Sandbox.on) return;
     try {
       var backup = {
         logs: Store.getLogs(),
@@ -2769,6 +2856,16 @@ Store.saveActiveWorkout({
     el.innerHTML = `
       <h1 class="page-title">Settings</h1>
       <div class="settings-list">
+        ${Sandbox.on ? `
+        <div class="warmup-card sandbox-card">
+          <span class="settings-k"><i class="ti ti-flask"></i> Sandbox</span>
+          <div class="settings-help">
+            You're working on a copy. Everything here, clearing data included, touches only the copy and vanishes when you exit or close the app.
+          </div>
+          <button class="action-btn" onclick="FORGE.exitSandbox()">
+            <i class="ti ti-x"></i> Exit sandbox
+          </button>
+        </div>` : ''}
         <div class="warmup-card settings-field">
           <label for="settings-bw">Body weight (${state.weightUnit})</label>
           <input type="number" class="weight-input" id="settings-bw" value="${settings.bodyWeight}" inputmode="numeric">
@@ -2925,7 +3022,7 @@ Store.saveActiveWorkout({
   function clearData() {
     if (confirm('This will delete ALL workout data, PRs, and settings. Are you sure?')) {
       if (confirm('Really? This cannot be undone.')) {
-        localStorage.clear();
+        Store.clearAll();   // in the sandbox, this wipes only the copy
         state.bodyWeight = 180;
         refreshCycle();
         resetWorkoutState();
@@ -2984,7 +3081,8 @@ Store.saveActiveWorkout({
     plateRemoveAt,
     plateBar,
     plateClear,
-    plateApply
+    plateApply,
+    exitSandbox
   };
 
   // ===== BOOT =====
