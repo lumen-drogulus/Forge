@@ -21,6 +21,8 @@
     timerRunning: false,
     bodyWeight: 180,         // default, configurable in settings
     workoutSize: 'normal',   // light | normal | extended -> which tiers load
+    pickedDayId: null,       // an alternate chosen from the picker; null = scheduled
+    countsAsSlot: null,      // true/false override for "counts toward the cycle"
     sheetsUrl: '',           // Google Sheets webhook URL
     weightUnit: 'lbs',
     workoutStartTime: null,
@@ -156,6 +158,55 @@
     return FORGE_DATA.cycleDays[state.cycleIndex] || FORGE_DATA.cycleDays[0];
   }
 
+  // What the START button will actually run: the scheduled day, unless an
+  // alternate has been picked. The scheduled slot is unchanged either way.
+  function selectedDay() {
+    if (state.pickedDayId) {
+      const d = dayById(state.pickedDayId);
+      if (d) return d;
+    }
+    return nextDay();
+  }
+
+  // Does finishing this count as the scheduled slot? The alternate's own
+  // default unless the toggle has overridden it this session.
+  function selectedAdvances() {
+    if (state.countsAsSlot !== null) return state.countsAsSlot;
+    if (!state.pickedDayId) return true;                 // the scheduled day always does
+    const d = dayById(state.pickedDayId);
+    return d && d.advancesByDefault !== false;
+  }
+
+  function pickDay(dayId) {
+    state.pickedDayId = (dayId === 'scheduled') ? null : dayId;
+    state.countsAsSlot = null;                           // reset to the new day's default
+    closeInfoPanel();
+    renderHome(document.getElementById('main-content'));
+  }
+
+  function toggleCountsAs() {
+    state.countsAsSlot = !selectedAdvances();
+    renderHome(document.getElementById('main-content'));
+  }
+
+  // Calisthenics days get their own colour so they read apart from the
+  // amber/cyan power-vs-hypertrophy split at a glance.
+  const COLOR_TONE = { green: 'cal', violet: 'core', cyan: 'hyp', amber: 'pwr', gray: 'rest' };
+
+  function toneOf(typeOrEntry) {
+    if (typeOrEntry && typeof typeOrEntry === 'object') {
+      // A calendar entry stores only dayId and type, so look the day up to
+      // recover its colour. Back & Core is type "power" but reads violet.
+      const d = typeOrEntry.color ? typeOrEntry : (typeOrEntry.dayId ? dayById(typeOrEntry.dayId) : null);
+      if (d && d.color && COLOR_TONE[d.color]) return COLOR_TONE[d.color];
+    }
+    const t = typeof typeOrEntry === 'string' ? typeOrEntry : (typeOrEntry && typeOrEntry.type);
+    if (t === 'rest') return 'rest';
+    if (t === 'calisthenics') return 'cal';
+    if (t === 'hypertrophy') return 'hyp';
+    return 'pwr';
+  }
+
   function codeFor(dayId) {
     const d = dayById(dayId);
     if (d && d.code) return d.code;
@@ -267,6 +318,7 @@
 
     // Rebuild calendar data from logs, then derive cycle position from it
     migrateCompletedDays();
+    migratePRs();
     refreshCycle();
 
     // If localStorage is empty, try restoring from Sheets backup
@@ -415,9 +467,12 @@ Store.saveActiveWorkout({
     }
     state._calendarNavActive = false;
     refreshCycle();
-    const day = nextDay();
+    const scheduled = nextDay();
+    const day = selectedDay();
     const workout = FORGE_DATA.workouts[day.id];
-    const typeClass = day.type === 'hypertrophy' ? 'hypertrophy' : 'power';
+    const typeClass = day.type === 'hypertrophy' ? 'hypertrophy'
+                    : day.type === 'calisthenics' ? 'calisthenics' : 'power';
+    const isAlt = !!state.pickedDayId;
 
     // Anything already logged today, so a second session shows context
     const todayStr = todayLocal();
@@ -433,7 +488,7 @@ Store.saveActiveWorkout({
       <div class="today-card ${typeClass}">
         <div class="today-card-top">
           <div>
-            <div class="today-label ${typeClass}">${todayEntries.length ? 'Next up' : 'Today'}</div>
+            <div class="today-label ${typeClass}">${isAlt ? 'Swapped in' : todayEntries.length ? 'Next up' : 'Today'}</div>
             <div class="today-name">${day.name}</div>
             <div class="today-meta">${day.label} · ${exercisesFor(workout, state.workoutSize).length} exercises · ~${minutesFor(workout, state.workoutSize)} min</div>
           </div>
@@ -441,9 +496,81 @@ Store.saveActiveWorkout({
         </div>
         ${doneLine}
       </div>
+      ${renderDayPicker(scheduled, day, typeClass)}
       ${renderSizePicker(workout, typeClass)}
       ${buildActionArea(typeClass)}
     `;
+  }
+
+  // Row under the today card: which workout, and whether it counts.
+  function renderDayPicker(scheduled, day, typeClass) {
+    if (state.workoutActive) return '';
+    const advances = selectedAdvances();
+    const isAlt = !!state.pickedDayId;
+    return `
+      <div class="day-picker-row">
+        <button class="day-picker-btn ${typeClass}" onclick="FORGE.openPickerSheet()">
+          <span class="dp-code">${codeFor(day.id)}</span>
+          <span class="dp-name">${day.name}</span>
+          <i class="ti ti-chevron-down"></i>
+        </button>
+        ${isAlt ? `
+        <button class="counts-toggle ${advances ? 'on' : ''}" onclick="FORGE.toggleCountsAs()">
+          <i class="ti ti-${advances ? 'check' : 'minus'}"></i>
+          Counts as ${scheduled.name}
+        </button>` : ''}
+      </div>
+    `;
+  }
+
+  function openPickerSheet() {
+    const scheduled = nextDay();
+    const alts = FORGE_DATA.alternates || {};
+    const current = selectedDay().id;
+
+    const row = (d, sub) => {
+      const w = FORGE_DATA.workouts[d.id];
+      const n = w ? exercisesFor(w, state.workoutSize).length : 0;
+      const m = w ? minutesFor(w, state.workoutSize) : 0;
+      return `
+        <button class="pick-row ${toneOf(d)} ${d.id === current ? 'selected' : ''}"
+                onclick="FORGE.pickDay('${d.id === scheduled.id && !state.pickedDayId ? 'scheduled' : d.id}')">
+          <span class="cal-code ${toneOf(d)}">${codeFor(d.id)}</span>
+          <span class="pick-body">
+            <span class="pick-name">${d.name}</span>
+            <span class="pick-sub">${sub} \u00b7 ${n} ex \u00b7 ~${m}m</span>
+          </span>
+          ${d.id === current ? '<i class="ti ti-check"></i>' : ''}
+        </button>`;
+    };
+
+    const calis = Object.values(alts).filter(a => a.type === 'calisthenics');
+    const other = Object.values(alts).filter(a => a.type !== 'calisthenics');
+
+    document.getElementById('info-panel-content').innerHTML = `
+      <div class="info-panel-title">Today's workout</div>
+
+      <div class="sheet-section-label">Scheduled</div>
+      ${row(scheduled, 'On the cycle')}
+
+      <div class="sheet-section-label">No gym</div>
+      ${calis.map(a => row(a, 'Bodyweight')).join('')}
+
+      <div class="sheet-section-label">Extra</div>
+      ${other.map(a => row(a, a.advancesByDefault === false ? 'Bonus, does not advance' : 'Counts as the slot')).join('')}
+
+      <div class="sheet-section-label">Other cycle days</div>
+      ${FORGE_DATA.cycleDays.filter(d => d.id !== scheduled.id).map(d => row(d, 'Out of order')).join('')}
+
+      <div class="sheet-note">
+        Picking a bodyweight or out-of-order day still counts as
+        <strong>${scheduled.name}</strong> by default, so tomorrow serves the next
+        workout in the cycle. Back &amp; Core is a bonus and leaves the cycle where it is.
+        Either way the toggle beside the picker overrides it before you start.
+      </div>
+    `;
+    document.getElementById('info-panel').classList.add('open');
+    document.getElementById('info-backdrop').classList.add('open');
   }
 
   const SIZE_META = {
@@ -559,10 +686,9 @@ Store.saveActiveWorkout({
       if (entries.length) {
         // Two codes fit at phone width. Beyond that, show one and a count.
         const shown = entries.length > 2 ? entries.slice(0, 1) : entries;
-        const chips = shown.map(c => {
-          const tone = c.type === 'rest' ? 'rest' : (c.type === 'hypertrophy' ? 'hyp' : 'pwr');
-          return `<span class="cal-code ${tone}">${labelFor(c)}</span>`;
-        }).join('');
+        const chips = shown.map(c =>
+          `<span class="cal-code ${toneOf(c)}">${labelFor(c)}</span>`
+        ).join('');
         const more = entries.length > 2 ? `<span class="cal-code more">+${entries.length - 1}</span>` : '';
         body += `<div class="cal-codes">${chips}${more}</div>`;
       } else if (!isPast && !isToday) {
@@ -572,8 +698,7 @@ Store.saveActiveWorkout({
         const len = cycleLen();
         const futureIdx = ((state.cycleIndex + daysAhead - 1) % len + len) % len;
         const fd = FORGE_DATA.cycleDays[futureIdx];
-        const tone = fd.type === 'hypertrophy' ? 'hyp' : 'pwr';
-        body += `<div class="cal-codes"><span class="cal-code ${tone} projected">${codeFor(fd.id)}</span></div>`;
+        body += `<div class="cal-codes"><span class="cal-code ${toneOf(fd)} projected">${codeFor(fd.id)}</span></div>`;
       } else {
         body += `<div class="cal-codes"><span class="cal-code blank">·</span></div>`;
       }
@@ -605,19 +730,22 @@ Store.saveActiveWorkout({
   // Full code key. Lives behind a button rather than on the home screen,
   // because a permanent nine-row legend costs more space than it earns.
   function openKeySheet() {
-    const rows = FORGE_DATA.cycleDays.map(d => {
-      const tone = d.type === 'hypertrophy' ? 'hyp' : 'pwr';
-      return `<div class="key-row"><span class="cal-code ${tone}">${codeFor(d.id)}</span><span>${d.name}</span></div>`;
-    }).join('');
+    const keyRow = d =>
+      `<div class="key-row"><span class="cal-code ${toneOf(d)}">${codeFor(d.id)}</span><span>${d.name}</span></div>`;
+    const rows = FORGE_DATA.cycleDays.map(keyRow).join('');
+    const altRows = Object.values(FORGE_DATA.alternates || {}).map(keyRow).join('');
 
     document.getElementById('info-panel-content').innerHTML = `
       <div class="info-panel-title">Calendar key</div>
 
-      <div class="sheet-section-label">Workout</div>
+      <div class="sheet-section-label">Cycle</div>
       <div class="key-grid">
         ${rows}
         <div class="key-row"><span class="cal-code rest">\u2715</span><span>Rest day</span></div>
       </div>
+
+      <div class="sheet-section-label">Alternates</div>
+      <div class="key-grid">${altRows}</div>
 
       <div class="sheet-section-label">Size</div>
       <div class="key-grid">
@@ -630,6 +758,8 @@ Store.saveActiveWorkout({
       <div class="key-grid">
         <div class="key-row"><span class="key-swatch" style="background:var(--amber)"></span><span>Power</span></div>
         <div class="key-row"><span class="key-swatch" style="background:var(--cyan)"></span><span>Hypertrophy</span></div>
+        <div class="key-row"><span class="key-swatch" style="background:var(--green, #10B981)"></span><span>Calisthenics</span></div>
+        <div class="key-row"><span class="key-swatch" style="background:var(--violet, #8B5CF6)"></span><span>Back &amp; Core</span></div>
         <div class="key-row"><span class="key-swatch" style="background:var(--gray)"></span><span>Rest</span></div>
       </div>
 
@@ -678,8 +808,9 @@ Store.saveActiveWorkout({
       }).join('')}
     ` : '<div class="sheet-empty">Nothing logged this day.</div>';
 
-    const options = FORGE_DATA.cycleDays.map(d => `
-      <button class="sheet-add ${d.type === 'hypertrophy' ? 'hyp' : 'pwr'}"
+    const allDays = FORGE_DATA.cycleDays.concat(Object.values(FORGE_DATA.alternates || {}));
+    const options = allDays.map(d => `
+      <button class="sheet-add ${toneOf(d)}"
               onclick="FORGE.markDay('${d.id}')">${codeFor(d.id)} ${d.name}</button>
     `).join('');
 
@@ -711,6 +842,13 @@ Store.saveActiveWorkout({
     // Noon on the chosen date keeps ordering sane against same-day workouts
     const stamp = new Date(dateStr + 'T12:00:00').toISOString();
 
+    // An alternate that does not advance (Back & Core) is logged as a bonus.
+    // Anything on the cycle takes its own slot.
+    let slot = null;
+    if (!isRest) {
+      const onCycle = FORGE_DATA.cycleDays.some(c => c.id === dayId);
+      slot = onCycle ? dayId : (d && d.advancesByDefault !== false ? nextDay().id : null);
+    }
     completed.push({
       date: dateStr,
       type: isRest ? 'rest' : d.type,
@@ -718,7 +856,7 @@ Store.saveActiveWorkout({
       size: 'normal',
       completedAt: stamp,
       manual: true,
-      slotId: isRest ? null : dayId
+      slotId: slot
     });
     completed.sort((a, b) => (sortKey(a) < sortKey(b) ? -1 : 1));
     Store.set('completedDays', completed);
@@ -774,7 +912,9 @@ Store.saveActiveWorkout({
 
   // ===== WORKOUT FLOW =====
   function startWorkout() {
-    const day = nextDay();
+    const day = selectedDay();
+    const scheduled = nextDay();
+    const advances = selectedAdvances();
     const workout = FORGE_DATA.workouts[day.id];
     if (!workout) return;
 
@@ -787,7 +927,7 @@ Store.saveActiveWorkout({
     const plan = exercisesFor(workout, state.workoutSize);
     state.activeWorkoutLog = {
       dayId: day.id,
-      slotId: day.id,            // which cycle slot this counts as; null = bonus
+      slotId: advances ? scheduled.id : null,   // cycle slot this counts as; null = bonus
       size: state.workoutSize,   // locked in here; the calendar code reads it
       date: new Date().toISOString(),
       exercises: plan.map(ex => ({
@@ -1002,8 +1142,8 @@ Store.saveActiveWorkout({
           <div class="stat-detail">${prevData ? prevData.detail : 'No data'}</div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">e1RM PR</div>
-          <div class="stat-value pr font-mono">${prData ? prData.e1rm + ' ' + state.weightUnit : '—'}</div>
+          <div class="stat-label">Best set</div>
+          <div class="stat-value pr font-mono">${prData ? prData.display : '—'}</div>
           <div class="stat-detail">${prData ? prData.detail : 'No data'}</div>
         </div>
         <div class="stat-card">
@@ -1162,8 +1302,8 @@ Store.saveActiveWorkout({
         const isPR = checkAndUpdateTimePR(ex.id, ex.name, seconds);
         if (isPR) showPRCelebration();
       }
-    } else if (repsNum > 0 && weight > 0) {
-      const isPR = checkAndUpdatePR(ex.id, ex.name, weight, repsNum);
+    } else if (repsNum > 0 && (weight > 0 || ex.weightMode === 'bw')) {
+      const isPR = checkAndUpdatePR(ex.id, ex.name, weight, repsNum, entered, ex);
       if (isPR) showPRCelebration();
     }
 
@@ -1229,8 +1369,8 @@ Store.saveActiveWorkout({
         const isPR = checkAndUpdateTimePR(ex.id, ex.name, seconds);
         if (isPR) showPRCelebration();
       }
-    } else if (repsNum > 0 && weight > 0) {
-      const isPR = checkAndUpdatePR(ex.id, ex.name, weight, repsNum);
+    } else if (repsNum > 0 && (weight > 0 || ex.weightMode === 'bw')) {
+      const isPR = checkAndUpdatePR(ex.id, ex.name, weight, repsNum, entered, ex);
       if (isPR) showPRCelebration();
     }
 
@@ -1367,6 +1507,8 @@ Store.saveActiveWorkout({
   }
 
   function resetWorkoutState() {
+    state.pickedDayId = null;      // the swap applies to one session, not forever
+    state.countsAsSlot = null;
     state.workoutActive = false;
     state.workoutPhase = 'overview';
     state.currentExerciseIndex = 0;
@@ -1458,31 +1600,133 @@ Store.saveActiveWorkout({
   }
 
   // ===== PR TRACKING =====
-  function checkAndUpdatePR(exerciseId, exerciseName, weight, reps) {
-    const prs = Store.getPRs();
-    const e1rm = FORGE_DATA.calculateE1RM(weight, reps);
+  // ===== PERSONAL RECORDS =====
+  // The record is the heaviest set you actually performed. e1RM rides along as
+  // a secondary number, and only where the formula holds. Epley is reliable to
+  // about 10 reps; past 12 it inflates badly enough that a high-rep accessory
+  // set could outrank a heavy single, so above that we do not print it.
+  const E1RM_REP_LIMIT = 12;
 
-    if (!prs[exerciseId]) {
-      prs[exerciseId] = { name: exerciseName, e1rm: e1rm, weight: weight, reps: reps, date: new Date().toISOString() };
-      Store.savePRs(prs);
-      return true;
+  function e1rmOf(weight, reps) {
+    if (!weight || !reps || reps > E1RM_REP_LIMIT) return null;
+    return FORGE_DATA.calculateE1RM(weight, reps);
+  }
+
+  // Bodyweight exercises have no external load, so ranking them by weight
+  // produced a phantom "252 lb" pike push-up. They are scored on reps instead.
+  function prModeOf(ex) {
+    if (!ex) return 'weight';
+    if (ex.trackMode === 'time') return 'time';
+    if (ex.weightMode === 'bw') return 'reps';
+    return 'weight';
+  }
+
+  // One-time reshape of records written by the old scheme, using the exercise
+  // definitions to spot the bodyweight ones whose stored weight was never real.
+  function migratePRs() {
+    const prs = Store.getPRs();
+    const byId = {};
+    Object.keys(FORGE_DATA.workouts).forEach(wid => {
+      (FORGE_DATA.workouts[wid].exercises || []).forEach(ex => { byId[ex.id] = ex; });
+    });
+
+    let changed = false;
+    Object.keys(prs).forEach(id => {
+      const pr = prs[id];
+      if (pr.prVersion === 2) return;
+      const mode = pr.isTime ? 'time' : prModeOf(byId[id]);
+      const next = { name: pr.name, mode: mode, date: pr.date, prVersion: 2 };
+
+      if (mode === 'time') {
+        next.bestTime = pr.bestTime || 0;
+        next.isTime = true;
+      } else if (mode === 'reps') {
+        // The old weight field was bodyweight, not load. Only the reps survive.
+        next.bestReps = pr.reps || 0;
+      } else {
+        const ex = byId[id];
+        next.weight = pr.weight || 0;
+        next.reps = pr.reps || 0;
+        next.weightMode = ex ? ex.weightMode : 'free';
+        // Old records stored total load with no memory of what was typed.
+        // Recover it so weighted dips read BW+25, not 205.
+        if (next.weightMode === 'bw-plus') {
+          next.entered = Math.max(0, next.weight - state.bodyWeight);
+        } else if (next.weightMode === 'bw-minus') {
+          next.entered = Math.max(0, state.bodyWeight - next.weight);
+        } else {
+          next.entered = next.weight;
+        }
+        next.e1rm = e1rmOf(next.weight, next.reps);
+      }
+      prs[id] = next;
+      changed = true;
+    });
+    if (changed) Store.savePRs(prs);
+  }
+
+  function checkAndUpdatePR(exerciseId, exerciseName, weight, reps, entered, ex) {
+    const prs = Store.getPRs();
+    const mode = prModeOf(ex);
+    const now = new Date().toISOString();
+
+    if (mode === 'reps') {
+      const prev = prs[exerciseId];
+      const isFirst = !prev || prev.bestReps === undefined;
+      if (isFirst || reps > prev.bestReps) {
+        prs[exerciseId] = {
+          name: exerciseName, mode: 'reps', bestReps: reps,
+          date: now, prVersion: 2
+        };
+        Store.savePRs(prs);
+        return !isFirst;            // first entry records silently
+      }
+      return false;
     }
 
-    if (e1rm > prs[exerciseId].e1rm) {
-      prs[exerciseId] = { name: exerciseName, e1rm: e1rm, weight: weight, reps: reps, date: new Date().toISOString() };
+    const prev = prs[exerciseId];
+    const isFirst = !prev || prev.weight === undefined;
+    const beaten = !isFirst && (
+      weight > prev.weight ||
+      (weight === prev.weight && reps > prev.reps)
+    );
+
+    if (isFirst || beaten) {
+      prs[exerciseId] = {
+        name: exerciseName, mode: 'weight',
+        weight: weight,
+        entered: (entered === null || entered === undefined) ? weight : entered,
+        weightMode: ex ? ex.weightMode : 'free',
+        reps: reps,
+        e1rm: e1rmOf(weight, reps),
+        date: now, prVersion: 2
+      };
       Store.savePRs(prs);
-      return true;
+      return !isFirst;              // first entry records silently
     }
     return false;
   }
 
+  // How a record reads on screen. BW+45 x 6 rather than 225 x 6, because the
+  // second one says you dipped two plates of external load.
+  function prSetDisplay(pr) {
+    if (!pr) return '';
+    if (pr.mode === 'reps') return `BW \u00d7 ${pr.bestReps}`;
+    const shown = (pr.entered !== undefined && pr.entered !== null) ? pr.entered : pr.weight;
+    if (pr.weightMode === 'bw-plus') return `BW+${shown} \u00d7 ${pr.reps}`;
+    if (pr.weightMode === 'bw-minus') return `BW-${shown} \u00d7 ${pr.reps}`;
+    return `${shown} \u00d7 ${pr.reps}`;
+  }
+
   function getPR(exerciseId) {
     const prs = Store.getPRs();
-    if (!prs[exerciseId]) return null;
     const pr = prs[exerciseId];
+    if (!pr) return null;
+    if (pr.mode === 'time' || pr.isTime) return null;
     return {
-      e1rm: pr.e1rm,
-      detail: `${pr.weight}×${pr.reps}`
+      display: prSetDisplay(pr),
+      e1rm: pr.e1rm || null,
+      detail: pr.e1rm ? `e1RM ${pr.e1rm}` : new Date(pr.date).toLocaleDateString()
     };
   }
 
@@ -1572,16 +1816,19 @@ Store.saveActiveWorkout({
 
   function checkAndUpdateTimePR(exerciseId, exerciseName, seconds) {
     const prs = Store.getPRs();
-    if (!prs[exerciseId] || !prs[exerciseId].bestTime || seconds > prs[exerciseId].bestTime) {
+    const prev = prs[exerciseId];
+    const isFirst = !prev || !prev.bestTime;
+    if (isFirst || seconds > prev.bestTime) {
       prs[exerciseId] = {
         name: exerciseName,
+        mode: 'time',
         bestTime: seconds,
         date: new Date().toISOString(),
         isTime: true,
-        e1rm: 0, weight: 0, reps: 0
+        prVersion: 2
       };
       Store.savePRs(prs);
-      return true;
+      return !isFirst;              // first entry records silently
     }
     return false;
   }
@@ -2009,36 +2256,66 @@ Store.saveActiveWorkout({
   // ===== PR TAB =====
   function renderPRs(el) {
     const prs = Store.getPRs();
-    const prList = Object.values(prs).sort((a, b) => {
-      if (a.isTime && b.isTime) return (b.bestTime || 0) - (a.bestTime || 0);
-      if (a.isTime) return 1;
-      if (b.isTime) return -1;
-      return b.e1rm - a.e1rm;
-    });
+    const all = Object.keys(prs).map(id => Object.assign({ id: id }, prs[id]));
 
-    if (prList.length === 0) {
+    if (all.length === 0) {
       el.innerHTML = `
         <div class="section-header" style="margin-top:8px;">Personal records</div>
         <div class="empty-state">
-          <div class="empty-state-icon">🏆</div>
+          <div class="empty-state-icon">\ud83c\udfc6</div>
           <div class="empty-state-text">Complete your first workout to start tracking PRs.</div>
         </div>
       `;
       return;
     }
 
+    // Three kinds of record that no single sort order can rank honestly, so
+    // they get their own sections instead of pretending to be comparable.
+    const weighted = all.filter(p => p.mode === 'weight' || (!p.mode && !p.isTime))
+                        .sort((x, y) => (y.weight || 0) - (x.weight || 0));
+    const byReps   = all.filter(p => p.mode === 'reps')
+                        .sort((x, y) => (y.bestReps || 0) - (x.bestReps || 0));
+    const byTime   = all.filter(p => p.mode === 'time' || p.isTime)
+                        .sort((x, y) => (y.bestTime || 0) - (x.bestTime || 0));
+
+    const row = (pr, value, sub) => `
+      <div class="pr-item">
+        <div>
+          <div class="pr-item-name">${pr.name}</div>
+          <div class="pr-item-detail">${sub}</div>
+        </div>
+        <div class="pr-item-value">${value}</div>
+      </div>`;
+
+    const section = (title, items, render) => items.length ? `
+      <div class="section-header" style="margin-top:18px;">${title}</div>
+      <div class="pr-list">${items.map(render).join('')}</div>` : '';
+
     el.innerHTML = `
-      <div class="section-header" style="margin-top:8px;">Personal records (e1RM)</div>
-      <div class="pr-list">
-        ${prList.map(pr => `
-          <div class="pr-item">
-            <div>
-              <div class="pr-item-name">${pr.name}</div>
-              <div class="pr-item-detail">${pr.isTime ? new Date(pr.date).toLocaleDateString() : `${pr.weight} × ${pr.reps} · ${new Date(pr.date).toLocaleDateString()}`}</div>
-            </div>
-            <div class="pr-item-value">${pr.isTime ? pr.bestTime + 's' : pr.e1rm + ' ' + state.weightUnit}</div>
-          </div>
-        `).join('')}
+      <div class="section-header" style="margin-top:8px;">Personal records</div>
+
+      ${section('Weighted', weighted, pr => row(
+        pr,
+        prSetDisplay(pr),
+        `${new Date(pr.date).toLocaleDateString()}${pr.e1rm ? ` \u00b7 e1RM ${pr.e1rm} ${state.weightUnit}` : ''}`
+      ))}
+
+      ${section('Bodyweight', byReps, pr => row(
+        pr,
+        `${pr.bestReps} reps`,
+        new Date(pr.date).toLocaleDateString()
+      ))}
+
+      ${section('Time', byTime, pr => row(
+        pr,
+        `${pr.bestTime}s`,
+        new Date(pr.date).toLocaleDateString()
+      ))}
+
+      <div class="sheet-note" style="margin-top:18px;">
+        The big number is the best set you actually did. e1RM is an estimate of
+        your one-rep max from that set, and it only appears at 12 reps or fewer
+        because the formula stops meaning anything above that.
       </div>
     `;
   }
@@ -2227,6 +2504,9 @@ Store.saveActiveWorkout({
     closeDaySheet,
     openKeySheet,
     setWorkoutSize,
+    openPickerSheet,
+    pickDay,
+    toggleCountsAs,
     markDay,
     clearDayEntry,
     calendarPrev,
