@@ -310,6 +310,7 @@
 
   // ===== INIT =====
   function init() {
+    playSplash();   // start the logo strike right away
     var settings = Store.getSettings();
     state.bodyWeight = settings.bodyWeight || 180;
     state.workoutSize = settings.workoutSize || 'normal';
@@ -1341,11 +1342,11 @@ Store.saveActiveWorkout({
       const seconds = parseInt(reps) || 0;
       if (seconds > 0) {
         const isPR = checkAndUpdateTimePR(ex.id, ex.name, seconds);
-        if (isPR) showPRCelebration();
+        if (isPR) showPRCelebration(ex, isPR);
       }
     } else if (repsNum > 0 && (weight > 0 || ex.weightMode === 'bw')) {
       const isPR = checkAndUpdatePR(ex.id, ex.name, weight, repsNum, entered, ex);
-      if (isPR) showPRCelebration();
+      if (isPR) showPRCelebration(ex, isPR);
     }
 
     renderExercise(document.getElementById('main-content'));
@@ -1408,11 +1409,11 @@ Store.saveActiveWorkout({
       const seconds = parseInt(reps) || 0;
       if (seconds > 0) {
         const isPR = checkAndUpdateTimePR(ex.id, ex.name, seconds);
-        if (isPR) showPRCelebration();
+        if (isPR) showPRCelebration(ex, isPR);
       }
     } else if (repsNum > 0 && (weight > 0 || ex.weightMode === 'bw')) {
       const isPR = checkAndUpdatePR(ex.id, ex.name, weight, repsNum, entered, ex);
-      if (isPR) showPRCelebration();
+      if (isPR) showPRCelebration(ex, isPR);
     }
 
     state.editingSetIndex = null;
@@ -1720,7 +1721,7 @@ Store.saveActiveWorkout({
           date: now, prVersion: 2
         };
         Store.savePRs(prs);
-        return !isFirst;            // first entry records silently
+        return isFirst ? false : prev;   // first entry records silently; a beaten record is handed back
       }
       return false;
     }
@@ -1743,7 +1744,7 @@ Store.saveActiveWorkout({
         date: now, prVersion: 2
       };
       Store.savePRs(prs);
-      return !isFirst;              // first entry records silently
+      return isFirst ? false : prev;   // first entry records silently; a beaten record is handed back
     }
     return false;
   }
@@ -1869,7 +1870,7 @@ Store.saveActiveWorkout({
         prVersion: 2
       };
       Store.savePRs(prs);
-      return !isFirst;              // first entry records silently
+      return isFirst ? false : prev;   // first entry records silently; a beaten record is handed back
     }
     return false;
   }
@@ -1916,7 +1917,8 @@ Store.saveActiveWorkout({
 
   function playTimerAlert() {
     try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const ctx = getAudio();   // the one shared audio context
+      if (!ctx) return;
       const tones = [660, 440, 660, 440]; // up, down, up, down
       tones.forEach((freq, i) => {
         const osc = ctx.createOscillator();
@@ -2030,72 +2032,291 @@ Store.saveActiveWorkout({
   }
 
 
-  // ===== FORGE EFFECT SYSTEM =====
-  function playAnvilStrike() {
+  // ===== FORGE FX: shared audio, splash strike, PR celebration =====
+  // One AudioContext for the whole app. Browsers cap how many can exist, and
+  // the old code made a new one for every sound, so a long session could go
+  // silent. Everything below (and the rest timer alert) shares this one.
+  let audioCtx = null, fxMaster = null, fxNoiseBuf = null;
+  function getAudio() {
     try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-
-      // Impact: short noise burst for the metallic hit
-      const bufSize = Math.floor(ctx.sampleRate * 0.04);
-      const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
-      const d = buf.getChannelData(0);
-      for (let i = 0; i < bufSize; i++) {
-        d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufSize, 4);
+      if (!audioCtx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return null;
+        audioCtx = new AC();
+        fxMaster = audioCtx.createGain();
+        fxMaster.gain.value = 0.9;
+        const comp = audioCtx.createDynamicsCompressor();
+        comp.threshold.value = -14;
+        comp.ratio.value = 4;
+        fxMaster.connect(comp);
+        comp.connect(audioCtx.destination);
+        fxNoiseBuf = audioCtx.createBuffer(1, audioCtx.sampleRate * 2, audioCtx.sampleRate);
+        const d = fxNoiseBuf.getChannelData(0);
+        for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
       }
-      const noise = ctx.createBufferSource();
-      noise.buffer = buf;
-      const nGain = ctx.createGain();
-      nGain.gain.value = 0.5;
-      noise.connect(nGain);
-      nGain.connect(ctx.destination);
-      noise.start();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      return audioCtx;
+    } catch (e) { return null; }
+  }
+  // Browsers only allow sound after a tap. The first tap anywhere unlocks it,
+  // so the rest timer alert can still sound when it fires on its own later.
+  document.addEventListener('pointerdown', getAudio, { once: true });
 
-      // High metallic ring
-      const r1 = ctx.createOscillator();
-      const g1 = ctx.createGain();
-      r1.frequency.value = 2200;
-      r1.type = 'sine';
-      g1.gain.setValueAtTime(0.25, ctx.currentTime);
-      g1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.7);
-      r1.connect(g1);
-      g1.connect(ctx.destination);
-      r1.start();
-      r1.stop(ctx.currentTime + 0.7);
-
-      // Lower harmonic for body
-      const r2 = ctx.createOscillator();
-      const g2 = ctx.createGain();
-      r2.frequency.value = 740;
-      r2.type = 'sine';
-      g2.gain.setValueAtTime(0.15, ctx.currentTime);
-      g2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
-      r2.connect(g2);
-      g2.connect(ctx.destination);
-      r2.start();
-      r2.stop(ctx.currentTime + 0.4);
-    } catch(e) {}
+  function fxEnv(g, t, peak, decay) {
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(peak, t + 0.003);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + decay);
+  }
+  function fxTone(freq, peak, decay, t) {
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.frequency.value = freq;
+    fxEnv(g, t, peak, decay);
+    o.connect(g); g.connect(fxMaster);
+    o.start(t); o.stop(t + decay + 0.05);
+  }
+  function fxNoise(t, dur, freq, q, peak, decay) {
+    const s = audioCtx.createBufferSource(), f = audioCtx.createBiquadFilter(), g = audioCtx.createGain();
+    s.buffer = fxNoiseBuf; f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = q;
+    fxEnv(g, t, peak, decay);
+    s.connect(f); f.connect(g); g.connect(fxMaster);
+    s.start(t, Math.random()); s.stop(t + dur);
+  }
+  // Struck steel: a pitch-dropping thud, a noise crack, then ringing partials
+  // at mismatched frequencies. The 1318 / 1322.5 pair beats about 4.5 times a
+  // second, which is the shimmer that makes it sound like metal.
+  function soundClang(k) {
+    if (!getAudio()) return;
+    const t = audioCtx.currentTime + 0.004;
+    const th = audioCtx.createOscillator(), tg = audioCtx.createGain();
+    th.frequency.setValueAtTime(150, t);
+    th.frequency.exponentialRampToValueAtTime(46, t + 0.16);
+    fxEnv(tg, t, 0.5 * k, 0.24);
+    th.connect(tg); tg.connect(fxMaster); th.start(t); th.stop(t + 0.3);
+    fxNoise(t, 0.08, 3800, 0.7, 0.7 * k, 0.05);
+    [[612, .07, .9], [1318, .13, 1.7], [1322.5, .10, 1.7], [3641, .07, .55], [5210, .035, .3], [7120, .02, .18]]
+      .forEach(p => fxTone(p[0], p[1] * k, p[2] * (0.8 + 0.3 * k), t));
+  }
+  function soundTap() {
+    if (!getAudio()) return;
+    const t = audioCtx.currentTime + 0.004;
+    fxNoise(t, 0.05, 4200, 0.9, 0.25, 0.03);
+    [[1560, .07, .32], [1566, .05, .32], [4310, .03, .14]].forEach(p => fxTone(p[0], p[1], p[2], t));
+  }
+  function soundBoom() {
+    if (!getAudio()) return;
+    const t = audioCtx.currentTime + 0.004;
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.frequency.setValueAtTime(72, t);
+    o.frequency.exponentialRampToValueAtTime(44, t + 0.5);
+    fxEnv(g, t, 0.55, 0.6);
+    o.connect(g); g.connect(fxMaster); o.start(t); o.stop(t + 0.7);
+  }
+  // Quench: the seam cooling. Filtered noise whose cutoff falls as it fades.
+  function soundHiss(dur, k) {
+    if (!getAudio()) return;
+    const t = audioCtx.currentTime + 0.004;
+    const s = audioCtx.createBufferSource(), f = audioCtx.createBiquadFilter(), g = audioCtx.createGain();
+    s.buffer = fxNoiseBuf; f.type = 'highpass';
+    f.frequency.setValueAtTime(7000, t);
+    f.frequency.exponentialRampToValueAtTime(2400, t + dur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.05 * k, t + 0.08);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    s.connect(f); f.connect(g); g.connect(fxMaster);
+    s.start(t, Math.random()); s.stop(t + dur + 0.05);
   }
 
-  function triggerFlash(flashElement) {
-    if (!flashElement) return;
-    flashElement.classList.add('active');
-    setTimeout(() => flashElement.classList.remove('active'), 500);
+  // --- animation helpers
+  const REDUCE_MOTION = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  let fxTimers = [];
+  function fxLater(ms, fn) { fxTimers.push(setTimeout(fn, ms)); }
+  function fxAnim(el, frames, delay, dur, easing) {
+    if (!el || !el.animate) return null;
+    return el.animate(frames, { delay: delay, duration: dur, easing: easing || 'linear', fill: 'both' });
+  }
+  function fxParts(mark) {
+    const q = s => mark.querySelector(s);
+    return { cold: q('.fx-cold'), seam: q('.fx-seam'), swing: q('.fx-swing'), shake: q('.fx-shake'), glow: q('.fx-glow') };
+  }
+  // The seam at the strike: white-hot, then cooling through amber to dark.
+  function fxFlash(el, delay, dur) {
+    return fxAnim(el, [
+      { opacity: 1, fill: '#FFF8E6' }, { opacity: 0.95, fill: '#FFC266', offset: 0.25 },
+      { opacity: 0.6, fill: '#FF7A1F', offset: 0.55 }, { opacity: 0, fill: '#FF5A1F' }], delay, dur);
+  }
+  function fxJolt(el, delay, amp) {
+    if (REDUCE_MOTION) return;
+    fxAnim(el, [
+      { transform: 'translate(0,0)' }, { transform: 'translate(0,' + amp + 'px)', offset: 0.18 },
+      { transform: 'translate(0,' + (-amp * 0.45) + 'px)', offset: 0.45 },
+      { transform: 'translate(0,' + (amp * 0.2) + 'px)', offset: 0.7 }, { transform: 'translate(0,0)' }],
+      delay, 240, 'ease-out');
   }
 
-  function showPRCelebration() {
-    const overlay = document.getElementById('pr-overlay');
-    if (!overlay) return;
-    overlay.classList.add('active');
+  // --- sparks: short streaks thrown from the strike point, with gravity.
+  // The frame loop only runs while sparks are alive, so it costs nothing idle.
+  const fxSystems = [];
+  let fxRaf = null, fxLast = 0;
+  function fxBurst(canvas, mark, n, power) {
+    if (REDUCE_MOTION || !canvas || !mark) return;
+    const host = canvas.parentElement.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const w = Math.round(host.width * dpr), h = Math.round(host.height * dpr);
+    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+    let sys = fxSystems.find(s => s.canvas === canvas);
+    if (!sys) { sys = { canvas: canvas, c2: canvas.getContext('2d'), parts: [] }; fxSystems.push(sys); }
+    sys.dpr = dpr;
+    const r = mark.getBoundingClientRect();
+    const x = r.left - host.left + 0.442 * r.width, y = r.top - host.top + 0.61 * r.height;
+    for (let i = 0; i < n; i++) {
+      const a = (-172 + Math.random() * 150) * Math.PI / 180;
+      const v = (160 + Math.random() * 380) * power;
+      sys.parts.push({ x: x, y: y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0,
+        max: 0.35 + Math.random() * 0.45, w: 1 + Math.random() * 1.4 });
+    }
+    if (!fxRaf) { fxLast = performance.now(); fxRaf = requestAnimationFrame(fxLoop); }
+  }
+  function fxLoop(now) {
+    const dt = Math.min(0.05, (now - fxLast) / 1000);
+    fxLast = now;
+    let alive = false;
+    fxSystems.forEach(s => {
+      const c2 = s.c2;
+      c2.setTransform(1, 0, 0, 1, 0, 0);
+      c2.clearRect(0, 0, s.canvas.width, s.canvas.height);
+      c2.setTransform(s.dpr, 0, 0, s.dpr, 0, 0);
+      s.parts = s.parts.filter(p => (p.life += dt) < p.max);
+      s.parts.forEach(p => {
+        p.vy += 900 * dt; p.vx *= (1 - 0.8 * dt);
+        p.x += p.vx * dt; p.y += p.vy * dt;
+        const k = p.life / p.max;
+        const col = k < 0.25 ? '255,246,224' : k < 0.6 ? '255,190,90' : '255,110,30';
+        c2.strokeStyle = 'rgba(' + col + ',' + (1 - k).toFixed(3) + ')';
+        c2.lineWidth = p.w; c2.lineCap = 'round';
+        c2.beginPath(); c2.moveTo(p.x, p.y); c2.lineTo(p.x - p.vx * 0.022, p.y - p.vy * 0.022); c2.stroke();
+      });
+      if (s.parts.length) alive = true;
+    });
+    fxRaf = alive ? requestAnimationFrame(fxLoop) : null;
+  }
 
-    setTimeout(() => {
-      const flash = document.getElementById('pr-flash');
-      triggerFlash(flash);
-      playAnvilStrike();
-    }, 200);
+  // ===== SPLASH =====
+  // Silent on purpose: a cold launch from the home screen has no tap yet, so
+  // the browser would block the sound anyway.
+  function playSplash() {
+    const mark = document.getElementById('splash-mark');
+    if (!mark) return;
+    const p = fxParts(mark);
+    fxAnim(mark, [{ opacity: 0, transform: 'scale(.96)' }, { opacity: 1, transform: 'scale(1)' }], 0, 300, 'ease-out');
+    fxAnim(p.cold, [{ opacity: 0.5 }, { opacity: 0.5, offset: 620 / 900 }, { opacity: 0 }], 0, 900);
+    if (REDUCE_MOTION) {
+      fxAnim(p.swing, [{ transform: 'rotate(0deg)' }, { transform: 'rotate(0deg)' }], 0, 1);
+    } else {
+      fxAnim(p.swing, [
+        { transform: 'rotate(58deg)', easing: 'cubic-bezier(.55,0,.95,.35)' },
+        { transform: 'rotate(0deg)', offset: 320 / 700, easing: 'cubic-bezier(.2,.7,.3,1)' },
+        { transform: 'rotate(7deg)', offset: 450 / 700, easing: 'cubic-bezier(.5,0,.8,.4)' },
+        { transform: 'rotate(0deg)' }], 300, 700);
+    }
+    fxFlash(p.seam, 620, 900);
+    fxJolt(p.shake, 620, 2.2);
+    fxAnim(p.glow, [{ opacity: 0 }, { opacity: 0.9, offset: 0.08 }, { opacity: 0 }], 620, 1000, 'ease-out');
+    fxAnim(document.getElementById('splash-word'), REDUCE_MOTION
+      ? [{ opacity: 0 }, { opacity: 1 }]
+      : [{ opacity: 0, letterSpacing: '40px', paddingLeft: '40px', filter: 'blur(6px)' },
+         { opacity: 1, letterSpacing: '16px', paddingLeft: '16px', filter: 'blur(0px)' }],
+      780, 520, 'cubic-bezier(.2,.8,.2,1)');
+    fxAnim(document.getElementById('splash-tag'), [{ opacity: 0 }, { opacity: 1 }], 1250, 400, 'ease-out');
+    fxLater(620, () => fxBurst(document.getElementById('splash-sparks'), mark, 18, 1));
+  }
 
-    setTimeout(() => {
-      overlay.classList.remove('active');
-    }, 2800);
+  // ===== PR CELEBRATION =====
+  // prev is the record that just got beaten (the PR checks hand it back).
+  // Reads the new record from storage and says what changed.
+  function prInfo(ex, prev) {
+    const cur = Store.getPRs()[ex.id] || {};
+    prev = prev || {};
+    const unit = state.weightUnit === 'kg' ? 'kg' : 'lb';
+    if (cur.mode === 'time') {
+      return { num: cur.bestTime + 's',
+        delta: '<b>+' + (cur.bestTime - (prev.bestTime || 0)) + 's</b> over ' + (prev.bestTime || 0) + 's' };
+    }
+    if (cur.mode === 'reps') {
+      const d = cur.bestReps - (prev.bestReps || 0);
+      return { num: prSetDisplay(cur),
+        delta: '<b>+' + d + ' rep' + (d === 1 ? '' : 's') + '</b> over BW × ' + (prev.bestReps || 0) };
+    }
+    const dW = Math.round((cur.weight - (prev.weight || 0)) * 10) / 10;
+    const dR = cur.reps - (prev.reps || 0);
+    const gain = dW > 0 ? '+' + dW + ' ' + unit : '+' + dR + ' rep' + (dR === 1 ? '' : 's');
+    return { num: prSetDisplay(cur),
+      delta: '<b>' + gain + '</b> over ' + prSetDisplay(prev) + (cur.e1rm ? ' · e1RM ' + cur.e1rm : '') };
+  }
+
+  let prTimer = null;
+  function showPRCelebration(ex, prev) {
+    const ov = document.getElementById('pr-overlay');
+    const mark = document.getElementById('pr-mark');
+    if (!ov || !mark || !ex) return;
+    const info = prInfo(ex, prev);
+    document.getElementById('pr-lift').textContent = ex.name;
+    document.getElementById('pr-num').textContent = info.num;
+    document.getElementById('pr-delta').innerHTML = info.delta;
+
+    clearTimeout(prTimer);
+    fxTimers.forEach(clearTimeout); fxTimers = [];
+    if (ov.getAnimations) ov.getAnimations({ subtree: true }).forEach(a => a.cancel());
+    ov.classList.add('active');
+    ov.onclick = dismissPR;
+
+    const p = fxParts(mark);
+    fxAnim(ov, [{ opacity: 0 }, { opacity: 1 }], 0, 160, 'ease-out');
+    fxAnim(mark, [{ opacity: 0, transform: 'scale(.94)' }, { opacity: 1, transform: 'scale(1)' }], 40, 200, 'ease-out');
+    fxAnim(p.cold, [{ opacity: 0.5 }, { opacity: 0.5, offset: 700 / 980 }, { opacity: 0 }], 0, 980);
+    // Blacksmith rhythm: tap, tap, wind up, strike.
+    fxAnim(p.swing, REDUCE_MOTION ? [{ transform: 'rotate(0deg)' }, { transform: 'rotate(0deg)' }] : [
+      { transform: 'rotate(26deg)', easing: 'cubic-bezier(.55,0,1,.45)' },
+      { transform: 'rotate(0deg)', offset: 200 / 980, easing: 'cubic-bezier(.2,.7,.4,1)' },
+      { transform: 'rotate(14deg)', offset: 290 / 980, easing: 'cubic-bezier(.55,0,1,.45)' },
+      { transform: 'rotate(0deg)', offset: 380 / 980, easing: 'cubic-bezier(.2,.7,.3,1)' },
+      { transform: 'rotate(66deg)', offset: 560 / 980, easing: 'cubic-bezier(.6,0,1,.3)' },
+      { transform: 'rotate(0deg)', offset: 700 / 980, easing: 'cubic-bezier(.2,.7,.3,1)' },
+      { transform: 'rotate(8deg)', offset: 830 / 980, easing: 'cubic-bezier(.5,0,.8,.4)' },
+      { transform: 'rotate(0deg)' }], 0, REDUCE_MOTION ? 1 : 980);
+    fxAnim(p.seam, [{ opacity: 0 }, { opacity: 0.55, offset: 0.02 }, { opacity: 0, offset: 0.2 }, { opacity: 0 }], 200, 1000);
+    fxAnim(p.seam, [{ opacity: 0 }, { opacity: 0.55, offset: 0.02 }, { opacity: 0, offset: 0.2 }, { opacity: 0 }], 380, 1000);
+    fxFlash(p.seam, 700, 1200);
+    fxJolt(p.shake, 700, 3.4);
+    fxAnim(p.glow, [{ opacity: 0 }, { opacity: 1, offset: 0.06 }, { opacity: 0 }], 700, 1300, 'ease-out');
+    fxAnim(document.getElementById('pr-title'), REDUCE_MOTION ? [{ opacity: 0 }, { opacity: 1 }] :
+      [{ opacity: 0, transform: 'scale(1.4)', filter: 'blur(4px)' }, { opacity: 1, transform: 'scale(1)', filter: 'blur(0px)' }],
+      720, 380, 'cubic-bezier(.2,.9,.3,1.15)');
+    fxAnim(document.getElementById('pr-lift'), [{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }], 880, 300, 'ease-out');
+    fxAnim(document.getElementById('pr-num'), [{ opacity: 0, transform: 'translateY(12px)' }, { opacity: 1, transform: 'none' }], 920, 360, 'cubic-bezier(.2,.8,.2,1)');
+    fxAnim(document.getElementById('pr-delta'), [{ opacity: 0 }, { opacity: 1 }], 1050, 300, 'ease-out');
+    fxAnim(document.getElementById('pr-cont'), [{ opacity: 0 }, { opacity: 1 }], 1700, 400, 'ease-out');
+
+    const sparks = document.getElementById('pr-sparks');
+    fxLater(200, () => { soundTap(); fxBurst(sparks, mark, 4, 0.5); });
+    fxLater(380, () => { soundTap(); fxBurst(sparks, mark, 5, 0.55); });
+    fxLater(700, () => { soundClang(1.35); soundBoom(); fxBurst(sparks, mark, 34, 1.25); });
+    fxLater(1050, () => soundHiss(1.3, 1));
+    prTimer = setTimeout(dismissPR, 3400);
+  }
+
+  // Tap anywhere, or wait 3.4 seconds. Pending sounds are cancelled too, so an
+  // early tap does not leave a clang ringing after the screen is gone.
+  function dismissPR() {
+    const ov = document.getElementById('pr-overlay');
+    if (!ov || !ov.classList.contains('active')) return;
+    clearTimeout(prTimer);
+    fxTimers.forEach(clearTimeout); fxTimers = [];
+    ov.onclick = null;
+    const out = ov.animate([{ opacity: getComputedStyle(ov).opacity }, { opacity: 0 }], { duration: 220, fill: 'forwards' });
+    out.onfinish = () => {
+      ov.classList.remove('active');
+      if (ov.getAnimations) ov.getAnimations({ subtree: true }).forEach(a => a.cancel());
+    };
   }
 
   // ===== PLATE CALCULATOR =====
