@@ -316,6 +316,45 @@ html, body {
   line-height: 1.5;
 }
 
+/* ===== Calendar key ===== */
+.legend-key-btn {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-family: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0;
+}
+.key-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.key-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.key-row .cal-code {
+  font-size: 11px;
+  min-width: 30px;
+  text-align: center;
+  padding: 3px 4px;
+}
+.key-swatch {
+  width: 30px;
+  height: 10px;
+  border-radius: 2px;
+  display: inline-block;
+}
+
 /* ===== Home: rest link + already-logged chips ===== */
 .rest-link-btn {
   width: 100%;
