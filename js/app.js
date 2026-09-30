@@ -358,7 +358,9 @@
 
     // Rebuild calendar data from logs, then derive cycle position from it
     migrateCompletedDays();
+    applyBwModes();
     migratePRs();
+    rebuildBwPRs();
     refreshCycle();
 
     // If localStorage is empty, try restoring from Sheets backup
@@ -371,6 +373,9 @@
           state.weightUnit = s.weightUnit || 'lbs';
         }
         migrateCompletedDays(); // restored backup may contain old poisoned entries
+        applyBwModes();
+        migratePRs();
+        rebuildBwPRs();
         refreshCycle();
         setupNavigation();
         restoreActiveWorkout();
@@ -1939,7 +1944,7 @@ Store.saveActiveWorkout({
     let changed = false;
     Object.keys(prs).forEach(id => {
       const pr = prs[id];
-      if (pr.prVersion === 2) return;
+      if (pr.prVersion >= 2) return;
       const mode = pr.isTime ? 'time' : prModeOf(byId[id]);
       const next = { name: pr.name, mode: mode, date: pr.date, prVersion: 2 };
 
@@ -1971,6 +1976,82 @@ Store.saveActiveWorkout({
     if (changed) Store.savePRs(prs);
   }
 
+  // Where a set sits on one bodyweight scale: BW-80 is -80, BW+0 is 0, BW+25
+  // is 25. Ranking BW+/BW- moves by total load broke when bodyweight changed:
+  // BW-100 at 222 lb (122 total) outranked BW-80 at 185 lb (105 total).
+  function addedLoad(rec) {
+    if (!rec) return 0;
+    if (rec.weightMode === 'bw-plus') return rec.entered || 0;
+    if (rec.weightMode === 'bw-minus') return -(rec.entered || 0);
+    return rec.weight || 0;
+  }
+
+  // The BW+ / BW- toggle used to reset to the data.js default every session.
+  // The pick is now saved per exercise and applied everywhere that id appears.
+  function applyBwModes() {
+    const modes = Store.getSettings().bwModes || {};
+    Object.keys(FORGE_DATA.workouts).forEach(wid => {
+      (FORGE_DATA.workouts[wid].exercises || []).forEach(ex => {
+        if (modes[ex.id]) ex.weightMode = modes[ex.id];
+      });
+    });
+  }
+
+  // Records migrated from v1 never knew a set was assisted, so every assisted
+  // pull-up and dip came out as BW+0. Rebuild those records from the logged
+  // sets, whose display text ("BW-60 x 5") still says what was typed.
+  // Runs once per record: rebuilt and newly set records carry prVersion 3.
+  function rebuildBwPRs() {
+    const prs = Store.getPRs();
+    const logs = Store.getLogs();
+    const best = {}, signed = {};
+    Object.keys(logs).forEach(dayId => {
+      [].concat(logs[dayId] || []).forEach(entry => {
+        (entry.exercises || []).forEach(exLog => {
+          const cur = prs[exLog.id];
+          if (cur && cur.prVersion >= 3) return;
+          (exLog.sets || []).forEach(set => {
+            const d = String(set.display || '');
+            const m = /^BW([+-])(\d+(?:\.\d+)?)\s/.exec(d);
+            const plain = /^BW \u00d7/.test(d);
+            const reps = parseInt(set.reps) || 0;
+            if ((!m && !plain) || reps <= 0) return;
+            if (m) signed[exLog.id] = true;
+            const rec = {
+              name: exLog.name, mode: 'weight',
+              weightMode: m && m[1] === '-' ? 'bw-minus' : 'bw-plus',
+              entered: m ? parseFloat(m[2]) : 0,
+              weight: set.weight || 0, reps: reps,
+              date: set.timestamp ? new Date(set.timestamp).toISOString() : entry.date
+            };
+            const b = best[exLog.id];
+            if (!b || addedLoad(rec) > addedLoad(b) ||
+                (addedLoad(rec) === addedLoad(b) && reps > b.reps)) best[exLog.id] = rec;
+          });
+        });
+      });
+    });
+    // Only moves logged with BW+ or BW- at least once. Plain "BW x 8" sets on
+    // pike push-ups and the like stay reps records.
+    const ids = Object.keys(best).filter(id => signed[id]);
+    // Seed the saved toggle from the record, so the first session after this
+    // fix opens on BW- instead of BW+ (a missed tap there logs BW+60 as a PR).
+    const settings = Store.getSettings();
+    settings.bwModes = settings.bwModes || {};
+    ids.forEach(id => {
+      const r = best[id];
+      r.e1rm = e1rmOf(r.weight, r.reps);
+      r.prVersion = 3;
+      prs[id] = r;
+      if (!settings.bwModes[id]) settings.bwModes[id] = r.weightMode;
+    });
+    if (ids.length) {
+      Store.savePRs(prs);
+      Store.saveSettings(settings);
+      applyBwModes();
+    }
+  }
+
   function checkAndUpdatePR(exerciseId, exerciseName, weight, reps, entered, ex) {
     const prs = Store.getPRs();
     const mode = prModeOf(ex);
@@ -1982,7 +2063,7 @@ Store.saveActiveWorkout({
       if (isFirst || reps > prev.bestReps) {
         prs[exerciseId] = {
           name: exerciseName, mode: 'reps', bestReps: reps,
-          date: now, prVersion: 2
+          date: now, prVersion: 3
         };
         Store.savePRs(prs);
         return isFirst ? false : prev;   // first entry records silently; a beaten record is handed back
@@ -1992,9 +2073,11 @@ Store.saveActiveWorkout({
 
     const prev = prs[exerciseId];
     const isFirst = !prev || prev.weight === undefined;
+    const now_ = addedLoad({ weightMode: ex ? ex.weightMode : 'free', entered: entered, weight: weight });
+    const was_ = isFirst ? 0 : addedLoad(prev);
     const beaten = !isFirst && (
-      weight > prev.weight ||
-      (weight === prev.weight && reps > prev.reps)
+      now_ > was_ ||
+      (now_ === was_ && reps > prev.reps)
     );
 
     if (isFirst || beaten) {
@@ -2005,7 +2088,7 @@ Store.saveActiveWorkout({
         weightMode: ex ? ex.weightMode : 'free',
         reps: reps,
         e1rm: e1rmOf(weight, reps),
-        date: now, prVersion: 2
+        date: now, prVersion: 3
       };
       Store.savePRs(prs);
       return isFirst ? false : prev;   // first entry records silently; a beaten record is handed back
@@ -2309,6 +2392,10 @@ Store.saveActiveWorkout({
     const workout = FORGE_DATA.workouts[day.id];
     const ex = activeExercises()[state.currentExerciseIndex];
     ex.weightMode = mode;
+    const s = Store.getSettings();
+    s.bwModes = Object.assign({}, s.bwModes, { [ex.id]: mode });
+    Store.saveSettings(s);
+    applyBwModes();
     renderExercise(document.getElementById('main-content'));
   }
 
@@ -2540,7 +2627,7 @@ Store.saveActiveWorkout({
       return { num: prSetDisplay(cur),
         delta: '<b>+' + d + ' rep' + (d === 1 ? '' : 's') + '</b> over BW × ' + (prev.bestReps || 0) };
     }
-    const dW = Math.round((cur.weight - (prev.weight || 0)) * 10) / 10;
+    const dW = Math.round((addedLoad(cur) - addedLoad(prev)) * 10) / 10;
     const dR = cur.reps - (prev.reps || 0);
     const gain = dW > 0 ? '+' + dW + ' ' + unit : '+' + dR + ' rep' + (dR === 1 ? '' : 's');
     return { num: prSetDisplay(cur),
@@ -3002,6 +3089,9 @@ Store.saveActiveWorkout({
         }
 
         migrateCompletedDays(); // imported backups may contain old poisoned entries
+        applyBwModes();
+        migratePRs();
+        rebuildBwPRs();
         refreshCycle();
         alert('Data imported successfully.');
         renderTab('home');
