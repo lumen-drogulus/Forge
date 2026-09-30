@@ -767,6 +767,25 @@ button { font: inherit; color: inherit; }
 .sheet-note { margin-top: 14px; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
 .sheet-note strong { color: var(--text-primary); font-weight: 600; }
 
+/* Start confirm sheet (v0.18) */
+.start-sheet-note { font-size: 14px; color: var(--text-secondary); margin: -4px 0 14px; }
+.start-confirm { margin-top: 14px; }
+.start-cancel {
+  width: 100%;
+  height: 48px;
+  margin-top: 8px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-secondary);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
 .pick-row {
   display: flex;
   align-items: center;
