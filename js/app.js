@@ -828,15 +828,16 @@ Store.saveActiveWorkout({
     extended: { mark: '+',      label: 'Extended' }
   };
 
-  function renderSizePicker(workout, typeClass) {
+  function renderSizePicker(workout, typeClass, handler) {
     if (state.workoutActive) return '';   // size is locked once you start
+    const fn = handler || 'FORGE.setWorkoutSize';
     return `
       <div class="size-picker">
         ${SIZE_ORDER.map(sz => {
           const m = SIZE_META[sz];
           const on = state.workoutSize === sz;
           return `
-            <button class="size-btn ${on ? 'active ' + typeClass : ''}" onclick="FORGE.setWorkoutSize('${sz}')">
+            <button class="size-btn ${on ? 'active ' + typeClass : ''}" onclick="${fn}('${sz}')">
               <span class="size-mark">${m.mark}</span>
               <span class="size-label">${m.label}</span>
               <span class="size-detail">${exercisesFor(workout, sz).length} ex \u00b7 ~${minutesFor(workout, sz)}m</span>
@@ -871,7 +872,7 @@ Store.saveActiveWorkout({
         <button class="rest-link-btn" onclick="FORGE.logRestToday()" aria-label="Log today as a rest day">
           ✕ Rest
         </button>
-        <button class="start-btn" onclick="FORGE.startWorkout()">
+        <button class="start-btn" onclick="FORGE.openStartSheet()">
           START WORKOUT <i class="ti ti-arrow-right"></i>
         </button>
       </div>
@@ -1162,6 +1163,40 @@ Store.saveActiveWorkout({
   }
 
   // ===== WORKOUT FLOW =====
+  // START opens this sheet instead of starting cold. The size on Home is
+  // remembered from last time, so an untouched default is exactly how a
+  // session starts at the wrong size. The confirm button names the size,
+  // so even a tap-through reads it.
+  function openStartSheet() {
+    const day = selectedDay();
+    const workout = FORGE_DATA.workouts[day.id];
+    if (!workout) return;
+    const tone = toneClass(day);
+    const m = SIZE_META[state.workoutSize];
+    document.getElementById('info-panel-content').innerHTML = `
+      <div class="info-panel-title">Start ${day.name}?</div>
+      <div class="start-sheet-note">Check the size. It locks once you start.</div>
+      ${renderSizePicker(workout, tone, 'FORGE.pickStartSize')}
+      <button class="save-set-btn start-confirm ${tone}" onclick="FORGE.confirmStart()">
+        <span>Start ${m.label} ${m.mark}</span> <i class="ti ti-arrow-right"></i>
+      </button>
+      <button class="start-cancel" onclick="FORGE.dismissPanel()">Cancel</button>
+    `;
+    showPanel('info-panel');
+  }
+
+  // Changing size inside the sheet saves it like the Home picker does,
+  // then redraws the sheet so the button text follows.
+  function pickStartSize(size) {
+    setWorkoutSize(size);
+    openStartSheet();
+  }
+
+  function confirmStart() {
+    dismissPanel();
+    startWorkout();
+  }
+
   function startWorkout() {
     const day = selectedDay();
     const scheduled = nextDay();
@@ -3034,6 +3069,10 @@ Store.saveActiveWorkout({
   // ===== PUBLIC API =====
   window.FORGE = {
     startWorkout,
+    openStartSheet,
+    pickStartSize,
+    confirmStart,
+    dismissPanel,
     logRestToday,
     openDaySheet,
     closeDaySheet,
