@@ -2233,13 +2233,19 @@ Store.saveActiveWorkout({
     state.timerTotal = duration;
     state.timerEndAt = Date.now() + duration * 1000;
     state.timerRunning = true;
+    scheduleRestSounds();
     syncTimerUI();
     state.timerInterval = setInterval(() => {
-      state.timerRemaining = Math.max(0, Math.round((state.timerEndAt - Date.now()) / 1000));
+      const msLeft = state.timerEndAt - Date.now();
+      state.timerRemaining = Math.max(0, Math.round(msLeft / 1000));
       syncTimerUI();
-      if (state.timerRemaining <= 0) {
-        stopTimer();
-        playTimerAlert();
+      // Buzz once, just before the first pip, so it lines up with the sound.
+      if (!restBuzzed && msLeft <= 3600) {
+        restBuzzed = true;
+        buzzCountdown(msLeft);
+      }
+      if (msLeft <= 0) {
+        stopTimer(true);   // true = let the final tone and buzz finish
         const display2 = document.getElementById('timer-display');
         if (display2) display2.textContent = 'Done!';
       }
@@ -2266,19 +2272,26 @@ Store.saveActiveWorkout({
   }
 
   // +15s: pushes the end time out. Works because the timer is clock-based.
+  // The countdown is booked against the old end time, so rebook it.
   function extendTimer(sec) {
     if (!state.timerRunning) return;
     state.timerEndAt += sec * 1000;
     state.timerTotal = (state.timerTotal || 0) + sec;
     state.timerRemaining = Math.max(0, Math.round((state.timerEndAt - Date.now()) / 1000));
+    scheduleRestSounds();
     syncTimerUI();
   }
 
-  function stopTimer() {
+  // finished = true only when the rest ran out on its own. Then the final
+  // tone, booked for exactly zero, is allowed to play. Every other stop
+  // (Stop button, saving a set, leaving the exercise) silences it.
+  function stopTimer(finished) {
     if (state.timerInterval) {
       clearInterval(state.timerInterval);
       state.timerInterval = null;
     }
+    if (finished === true) { restSounds = []; restBuzzed = false; }
+    else cancelRestSounds();
     state.timerRunning = false;
     syncTimerUI();
   }
@@ -2293,24 +2306,84 @@ Store.saveActiveWorkout({
     }
   }
 
-  function playTimerAlert() {
+  // ===== REST COUNTDOWN (v0.21) =====
+  // Pips at 3, 2 and 1 seconds left, then a long high tone on zero.
+  // All four are booked on the audio clock the moment the rest starts, so
+  // they land on the exact second even if the phone slows the page down.
+  // The vibration can't be booked that far ahead (browsers cap a pattern
+  // at 10 s per step), so it goes out once, 3.6 s before the end.
+  let restSounds = [];     // booked tones, kept so they can be cancelled
+  let restBuzzed = false;  // has this rest's vibration gone out yet
+  const REST_LEVEL = 0.63; // level-matched to the old siren in the audition
+
+  function cancelRestSounds() {
+    restSounds.forEach(o => { try { o.stop(); } catch (e) {} });
+    restSounds = [];
+    // Only cancel a vibration that actually went out.
+    if (restBuzzed) { try { navigator.vibrate(0); } catch (e) {} }
+    restBuzzed = false;
+  }
+
+  function scheduleRestSounds() {
+    cancelRestSounds();
     try {
       const ctx = getAudio();   // the one shared audio context
       if (!ctx) return;
-      const tones = [660, 440, 660, 440]; // up, down, up, down
-      tones.forEach((freq, i) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.frequency.value = freq;
-        osc.type = 'square';
-        gain.gain.value = 0.3;
-        const start = ctx.currentTime + i * 0.3;
-        osc.start(start);
-        osc.stop(start + 0.2);
+      const now = ctx.currentTime;
+      const secLeft = (state.timerEndAt - Date.now()) / 1000;
+      const out = ctx.createGain();
+      out.gain.value = REST_LEVEL;
+      const lp = ctx.createBiquadFilter();   // takes the fizz off the square wave
+      lp.type = 'lowpass';
+      lp.frequency.value = 3500;
+      lp.connect(out);
+      out.connect(fxMaster);
+      // Pips: 1000 Hz, a sharp start that dies away in 0.12 s.
+      [3, 2, 1].forEach(k => {
+        const t = now + secLeft - k;
+        if (t < now) return;
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = 'square';
+        o.frequency.value = 1000;
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.linearRampToValueAtTime(0.3, t + 0.005);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
+        o.connect(g); g.connect(lp);
+        o.start(t); o.stop(t + 0.17);
+        restSounds.push(o);
       });
-    } catch(e) {}
+      // Zero: an octave up, held for half a second.
+      const t = now + Math.max(0, secLeft);
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'square';
+      o.frequency.value = 2000;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(0.3, t + 0.005);
+      g.gain.setValueAtTime(0.3, t + 0.5);
+      g.gain.linearRampToValueAtTime(0.0001, t + 0.56);
+      o.connect(g); g.connect(lp);
+      o.start(t); o.stop(t + 0.6);
+      restSounds.push(o);
+    } catch (e) {}
+  }
+
+  // One vibration pattern covering the whole countdown: short buzzes on the
+  // pips, a long one on zero. Patterns alternate buzz, pause, buzz, so it
+  // starts with a 0 ms buzz to open on a pause. Screen-on only: browsers
+  // refuse to vibrate a page that isn't showing.
+  function buzzCountdown(msLeft) {
+    try {
+      if (!navigator.vibrate) return;
+      const marks = [3000, 2000, 1000, 0].map(k => msLeft - k).filter(a => a >= 0);
+      const pattern = [0];
+      let cursor = 0;
+      marks.forEach((a, i) => {
+        const len = i === marks.length - 1 ? 500 : 100;
+        pattern.push(Math.max(0, Math.round(a - cursor)), len);
+        cursor = a + len;
+      });
+      navigator.vibrate(pattern);
+    } catch (e) {}
   }
 
   function formatTime(seconds) {
