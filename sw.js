@@ -1,14 +1,17 @@
 // FORGE service worker
 // Bump CACHE_VERSION on every deploy. The activate handler deletes every
 // cache that doesn't match, which is what forces a clean slate.
-const CACHE_VERSION = 'v11';
+const CACHE_VERSION = 'v12';
 const CACHE_NAME = 'forge-' + CACHE_VERSION;
 
 const ASSETS = [
   './',
   './index.html',
   './css/styles.css',
+  './css/figures.css',
   './js/data.js',
+  './js/figures.js',
+  './js/moves.js',
   './js/app.js',
   './manifest.json',
   './icon-192.png',
