@@ -537,6 +537,7 @@ Store.saveActiveWorkout({
     if (plate) plate.classList.remove('open');
     const bd = document.getElementById('info-backdrop');
     if (bd) bd.classList.remove('open');
+    if (window.ForgeFigures) window.ForgeFigures.stopAll();
     state._sheetDate = null;
   }
 
@@ -2789,13 +2790,25 @@ Store.saveActiveWorkout({
 
     content.innerHTML = `
       <div class="info-panel-title">${ex.name}</div>
-      <img class="info-panel-image" src="${ex.image}" alt="${ex.name}" onerror="this.style.display='none'">
+      <div id="info-figure"></div>
       <div class="info-panel-tip">${ex.tip}</div>
       ${(ex.isFinisher || ex.isPrimer) && ex.finisherProgression ? `<div style="font-size:12px;color:var(--amber);margin-bottom:12px;">${ex.isPrimer ? '\u26a1' : '\ud83d\udd25'} ${ex.finisherProgression}</div>` : ''}
       <button class="info-panel-video-btn" onclick="window.open('${ex.video}', '_blank')">
         <i class="ti ti-player-play"></i> Watch demo video
       </button>
     `;
+
+    // Animated figure in the day's colour. If there is no figure for this
+    // exercise, or it fails to draw, the old image goes in its place.
+    panel.classList.remove('power', 'hypertrophy', 'calisthenics', 'core');
+    panel.classList.add(toneClass(day));
+    const slot = document.getElementById('info-figure');
+    const Figs = window.ForgeFigures;
+    if (Figs) Figs.stopAll();
+    const fig = Figs && Figs.has(ex.id) ? Figs.mount(slot, ex.id, { code: codeFor(day.id), name: ex.name }) : null;
+    if (!fig && ex.image) {
+      slot.outerHTML = `<img class="info-panel-image" src="${ex.image}" alt="${ex.name}" onerror="this.style.display='none'">`;
+    }
 
     showPanel('info-panel');
   }
