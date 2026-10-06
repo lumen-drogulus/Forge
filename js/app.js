@@ -355,6 +355,7 @@
     state.sheetsUrl = settings.sheetsUrl || FORGE_DATA.sheetsWebhookUrl || '';
     if (Sandbox.on) state.sheetsUrl = '';   // sandbox never talks to Sheets
     setupSandboxChrome();
+    requestPersist();
 
     // Rebuild calendar data from logs, then derive cycle position from it
     migrateCompletedDays();
@@ -391,6 +392,18 @@
     renderTab('home');
     hideSplash();
     registerSW();
+  }
+
+  // v0.22: ask the browser to keep FORGE's storage when the phone runs low on
+  // space. Without this the data sits in the "best effort" bin, which Chrome
+  // may clear on its own. Installed apps are usually granted it silently.
+  function requestPersist() {
+    try {
+      if (!navigator.storage || !navigator.storage.persist) return;
+      navigator.storage.persisted().then(function(p) {
+        if (!p) navigator.storage.persist();
+      }).catch(function() {});
+    } catch (e) {}
   }
 
   // Safety net: persist the active workout the instant the app is backgrounded
@@ -634,6 +647,7 @@ Store.saveActiveWorkout({
         <div class="ro-meta">${day.label} · ${exs.length} movements · ~${minutesFor(workout, (state.activeWorkoutLog && state.activeWorkoutLog.size) || state.workoutSize)} min</div>
         ${doneLine}
       </section>
+      ${renderBackupNudge()}
       ${renderWeekStrip(typeClass)}
       ${renderDayPicker(scheduled, day, typeClass)}
       ${renderMoveTable(exs, typeClass)}
@@ -2662,27 +2676,35 @@ Store.saveActiveWorkout({
     const mark = document.getElementById('splash-mark');
     if (!mark) return;
     const p = fxParts(mark);
-    fxAnim(mark, [{ opacity: 0, transform: 'scale(.96)' }, { opacity: 1, transform: 'scale(1)' }], 0, 300, 'ease-out');
-    fxAnim(p.cold, [{ opacity: 0.5 }, { opacity: 0.5, offset: 620 / 900 }, { opacity: 0 }], 0, 900);
-    if (REDUCE_MOTION) {
-      fxAnim(p.swing, [{ transform: 'rotate(0deg)' }, { transform: 'rotate(0deg)' }], 0, 1);
-    } else {
+    const T = 740;   // the strike, in ms from launch
+    // Grow from Android's launch-icon size to full size.
+    fxAnim(mark, [{ transform: 'scale(.457)' }, { transform: 'scale(1)' }], 0, REDUCE_MOTION ? 300 : 420,
+      'cubic-bezier(.3,0,.15,1)');
+    if (!REDUCE_MOTION) {
+      // Wind up while it grows: hammer lifts out of frame, the metal cools to half heat.
+      fxAnim(p.cold, [{ opacity: 0 }, { opacity: 0.45, offset: 360 / 1020 }, { opacity: 0.45, offset: T / 1020 }, { opacity: 0 }], 0, 1020);
       fxAnim(p.swing, [
-        { transform: 'rotate(58deg)', easing: 'cubic-bezier(.55,0,.95,.35)' },
-        { transform: 'rotate(0deg)', offset: 320 / 700, easing: 'cubic-bezier(.2,.7,.3,1)' },
-        { transform: 'rotate(7deg)', offset: 450 / 700, easing: 'cubic-bezier(.5,0,.8,.4)' },
-        { transform: 'rotate(0deg)' }], 300, 700);
+        { transform: 'rotate(0deg)', easing: 'cubic-bezier(.45,0,.35,1)' },
+        { transform: 'rotate(58deg)', offset: 360 / 1120 },
+        { transform: 'rotate(58deg)', offset: 420 / 1120, easing: 'cubic-bezier(.55,0,.95,.35)' },
+        { transform: 'rotate(0deg)', offset: T / 1120, easing: 'cubic-bezier(.2,.7,.3,1)' },
+        { transform: 'rotate(7deg)', offset: 870 / 1120, easing: 'cubic-bezier(.5,0,.8,.4)' },
+        { transform: 'rotate(0deg)' }], 0, 1120);
     }
-    fxFlash(p.seam, 620, 900);
-    fxJolt(p.shake, 620, 2.2);
-    fxAnim(p.glow, [{ opacity: 0 }, { opacity: 0.9, offset: 0.08 }, { opacity: 0 }], 620, 1000, 'ease-out');
+    // The seam stays dark until the hammer lands, then flashes white-hot and cools.
+    const o = T / (T + 900);
+    fxAnim(p.seam, [{ opacity: 0, fill: '#FFF8E6' }, { opacity: 0, fill: '#FFF8E6', offset: o },
+      { opacity: 1, fill: '#FFF8E6', offset: o }, { opacity: 0.95, fill: '#FFC266', offset: o + 0.25 * (1 - o) },
+      { opacity: 0.6, fill: '#FF7A1F', offset: o + 0.55 * (1 - o) }, { opacity: 0, fill: '#FF5A1F' }], 0, T + 900);
+    fxJolt(p.shake, T, 2.2);
+    fxAnim(p.glow, [{ opacity: 0 }, { opacity: 0.9, offset: 0.08 }, { opacity: 0 }], T, 1000, 'ease-out');
     fxAnim(document.getElementById('splash-word'), REDUCE_MOTION
       ? [{ opacity: 0 }, { opacity: 1 }]
       : [{ opacity: 0, letterSpacing: '40px', paddingLeft: '40px', filter: 'blur(6px)' },
          { opacity: 1, letterSpacing: '16px', paddingLeft: '16px', filter: 'blur(0px)' }],
-      780, 520, 'cubic-bezier(.2,.8,.2,1)');
-    fxAnim(document.getElementById('splash-tag'), [{ opacity: 0 }, { opacity: 1 }], 1250, 400, 'ease-out');
-    fxLater(620, () => fxBurst(document.getElementById('splash-sparks'), mark, 18, 1));
+      900, 520, 'cubic-bezier(.2,.8,.2,1)');
+    fxAnim(document.getElementById('splash-tag'), [{ opacity: 0 }, { opacity: 1 }], 1370, 400, 'ease-out');
+    fxLater(T, () => fxBurst(document.getElementById('splash-sparks'), mark, 18, 1));
   }
 
   // ===== PR CELEBRATION =====
@@ -2904,9 +2926,10 @@ Store.saveActiveWorkout({
     el.innerHTML = `
       <h1 class="page-title">Tracker</h1>
       ${renderCalendar()}
+      ${FORGE_DATA.sheetsViewUrl ? `
       <button class="sheet-link-btn" onclick="window.open('${FORGE_DATA.sheetsViewUrl}', '_blank')">
         <i class="ti ti-table"></i> Open Google Sheet <i class="ti ti-external-link"></i>
-      </button>
+      </button>` : ''}
       ${renderRecentWorkouts()}
     `;
   }
@@ -3088,9 +3111,10 @@ Store.saveActiveWorkout({
         <button class="start-btn" onclick="FORGE.saveSettings()">Save settings</button>
         <div class="section-header" style="margin-top:10px;">Data</div>
         <button class="action-btn" onclick="FORGE.exportData()">
-          <i class="ti ti-download"></i> Export all data (JSON)
+          <i class="ti ti-share"></i> Back up data
         </button>
-        <input type="file" id="import-file" accept=".json" style="display:none;" onchange="FORGE.importData(this)">
+        ${renderBackupStatus()}
+        <input type="file" id="import-file" accept=".json,.txt,application/json,text/plain" style="display:none;" onchange="FORGE.importData(this)">
         <button class="action-btn" onclick="document.getElementById('import-file').click()">
           <i class="ti ti-upload"></i> Import data from JSON
         </button>
@@ -3119,6 +3143,11 @@ Store.saveActiveWorkout({
     renderTab('home');
   }
 
+  // ===== BACKUP (v0.22) =====
+  // Export opens the phone's share menu, so the backup leaves the phone
+  // (Drive, Gmail, a text). Android refuses to share .json files, so the
+  // shared copy is a .txt holding the same JSON; Import reads either.
+  // Where sharing isn't available (most desktops) it downloads a .json.
   function exportData() {
     const data = {
       logs: Store.getLogs(),
@@ -3126,13 +3155,88 @@ Store.saveActiveWorkout({
       settings: Store.getSettings(),
       completedDays: Store.getCompletedDays()
     };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const json = JSON.stringify(data, null, 2);
+    const stamp = todayLocal();
+
+    let file = null;
+    try { file = new File([json], `forge-backup-${stamp}.txt`, { type: 'text/plain' }); } catch (e) {}
+
+    if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+      navigator.share({ files: [file], title: 'FORGE backup ' + stamp })
+        .then(function() { markBackedUp(); })
+        .catch(function(err) {
+          // Cancelled from the share menu: not a backup. Anything else: download instead.
+          if (err && err.name === 'AbortError') return;
+          downloadBackup(json, stamp);
+        });
+      return;
+    }
+    downloadBackup(json, stamp);
+  }
+
+  function downloadBackup(json, stamp) {
+    const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `forge-backup-${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `forge-backup-${stamp}.json`;
     a.click();
-    URL.revokeObjectURL(url);
+    setTimeout(function() { URL.revokeObjectURL(url); }, 1000);
+    markBackedUp();
+  }
+
+  function markBackedUp() {
+    Store.set('lastBackup', new Date().toISOString());
+    if (state.currentTab === 'settings' || state.currentTab === 'home') renderTab(state.currentTab);
+  }
+
+  // Whole days since an ISO time, by local calendar date.
+  function daysSince(iso) {
+    const then = new Date(localDateOf(iso) + 'T00:00:00');
+    const now = new Date(todayLocal() + 'T00:00:00');
+    return Math.round((now - then) / 86400000);
+  }
+
+  // Overdue: something to lose and no backup in 14 days. A first backup gets
+  // a week of grace from the first logged workout.
+  const BACKUP_DUE_DAYS = 14;
+  const FIRST_BACKUP_GRACE = 7;
+  function backupInfo() {
+    const last = Store.get('lastBackup');
+    const firsts = [];
+    Object.values(Store.getLogs()).forEach(list => (list || []).forEach(l => { if (l && l.completedAt) firsts.push(l.completedAt); }));
+    const hasData = firsts.length > 0;
+    if (last) {
+      const d = daysSince(last);
+      return { hasData, last, days: d, overdue: hasData && d >= BACKUP_DUE_DAYS };
+    }
+    const firstLog = firsts.sort()[0];
+    return { hasData, last: null, days: null,
+             overdue: hasData && daysSince(firstLog) >= FIRST_BACKUP_GRACE };
+  }
+
+  function agoText(days) {
+    return days === 0 ? 'today' : days === 1 ? 'yesterday' : days + ' days ago';
+  }
+
+  function renderBackupStatus() {
+    const b = backupInfo();
+    const text = b.last ? 'Last backup: ' + agoText(b.days) : 'Never backed up';
+    return `<div class="settings-help backup-status${b.overdue ? ' overdue' : ''}">
+      ${text}. Sends a copy to Drive, email or a text, so a lost phone doesn't take your history with it.
+    </div>`;
+  }
+
+  // Home nudge: only for copies with no Google Sheet behind them (the sheet
+  // already is the backup), never in the sandbox, and only when overdue.
+  function renderBackupNudge() {
+    if (FORGE_DATA.sheetsWebhookUrl || Sandbox.on || state.workoutActive) return '';
+    const b = backupInfo();
+    if (!b.overdue) return '';
+    const text = b.last ? 'No backup in ' + b.days + ' days' : 'Not backed up yet';
+    return `<button class="backup-nudge" onclick="FORGE.exportData()">
+      <i class="ti ti-alert-triangle"></i><span>${text}</span><span class="backup-nudge-go">Back up now</span>
+    </button>`;
   }
 
   function importData(input) {
@@ -3171,7 +3275,7 @@ Store.saveActiveWorkout({
           Store.saveSettings(data.settings);
           state.bodyWeight = data.settings.bodyWeight || 180;
           state.weightUnit = data.settings.weightUnit || 'lbs';
-          state.sheetsUrl = data.settings.sheetsUrl || '';
+          state.sheetsUrl = Sandbox.on ? '' : (data.settings.sheetsUrl || FORGE_DATA.sheetsWebhookUrl || '');
         }
 
         migrateCompletedDays(); // imported backups may contain old poisoned entries

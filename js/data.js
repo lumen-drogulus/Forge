@@ -8,8 +8,9 @@
 const FORGE_DATA = {
   version: "1.0.0",
   programName: "PH-PPL",
-  sheetsWebhookUrl: "https://script.google.com/macros/s/AKfycbz3em4yss9biz9uf3Bx2yhh41eTzJ_6Zo_pry_ReiPkcn4ORalTL8F9khZIDYJydwHztA/exec",
-  sheetsViewUrl: "https://docs.google.com/spreadsheets/d/1vl2PzxKjfInOC5d4gD-vN1vIJY7xNirurmW7hoo56OU/edit",
+  // Sheets addresses live in js/config.js (v0.22), so copies differ by one file.
+  sheetsWebhookUrl: (typeof FORGE_CONFIG !== 'undefined' && FORGE_CONFIG.sheetsWebhookUrl) || '',
+  sheetsViewUrl: (typeof FORGE_CONFIG !== 'undefined' && FORGE_CONFIG.sheetsViewUrl) || '',
   // Six training slots. Rest is NO LONGER a cycle position: it is a calendar
   // marker only, so marking a rest day never costs you a workout. "code" is
   // what the calendar prints: P/B/L for push/back/legs, 1/2 for the power and
