@@ -1260,7 +1260,8 @@ button { font: inherit; color: inherit; }
   transition: opacity 0.5s;
 }
 .splash.hidden { opacity: 0; pointer-events: none; }
-.splash-mark { width: 232px; height: 232px; transform: scale(.457); }
+.splash-mark { width: 232px; height: 232px; transform: scale(.9375); }
+.splash-mark svg { clip-path: inset(13.22% round 50%); }
 .splash-word {
   position: absolute;
   top: calc(50% + 148px);
@@ -1286,8 +1287,8 @@ button { font: inherit; color: inherit; }
 }
 .splash-tag .h { color: #F5A524; }
 .splash-tag .q { color: #22C3E6; }
-/* Starting pose: the mark sits small, centred, hammer down, exactly like
-   Android's launch icon, so the hand-off is invisible. playSplash() grows it. */
+/* Starting pose: Android's launch circle, exactly. The logo at the icon's size,
+   hammer down, cropped to the same circle. playSplash() opens it into the square. */
 .splash-word, .splash-tag { opacity: 0; }
 
 

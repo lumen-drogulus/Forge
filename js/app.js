@@ -2677,9 +2677,13 @@ Store.saveActiveWorkout({
     if (!mark) return;
     const p = fxParts(mark);
     const T = 740;   // the strike, in ms from launch
-    // Grow from Android's launch-icon size to full size.
-    fxAnim(mark, [{ transform: 'scale(.457)' }, { transform: 'scale(1)' }], 0, REDUCE_MOTION ? 300 : 420,
-      'cubic-bezier(.3,0,.15,1)');
+    // Open Android's launch circle into the full square, growing to full size.
+    const open = REDUCE_MOTION ? 300 : 420, ease = 'cubic-bezier(.3,0,.15,1)';
+    const svg = mark.querySelector('svg');
+    fxAnim(mark, [{ transform: 'scale(.9375)' }, { transform: 'scale(1)' }], 0, open, ease);
+    const morph = fxAnim(svg, [{ clipPath: 'inset(13.22% round 50%)' }, { clipPath: 'inset(0% round 0%)' }], 0, open, ease);
+    // Then drop the clip, so the strike's jolt never shaves an edge.
+    fxLater(open + 20, () => { if (svg) svg.style.clipPath = 'none'; if (morph) morph.cancel(); });
     if (!REDUCE_MOTION) {
       // Wind up while it grows: hammer lifts out of frame, the metal cools to half heat.
       fxAnim(p.cold, [{ opacity: 0 }, { opacity: 0.45, offset: 360 / 1020 }, { opacity: 0.45, offset: T / 1020 }, { opacity: 0 }], 0, 1020);
