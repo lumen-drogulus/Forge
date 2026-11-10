@@ -485,6 +485,9 @@ Store.saveActiveWorkout({
   // jumping a version. Add a new entry at the top for every release that has
   // notes; a release without notes adds nothing and shows nothing.
   const RELEASES = [
+    { id: 'v0.30.2', items: [
+      ['Cable crunch replaced', 'Three moves take its place: Reverse Crunch on Push A, Pallof Press on Legs A and Decline Plate Crunch on Back & Core. Their demos are still to come; the tip and video link are there.'],
+    ] },
     { id: 'v0.30.1', items: [
       ['Chest-supported row', 'Now counted as a dumbbell move: enter one dumbbell and the total for both hands shows under it.'],
     ] },

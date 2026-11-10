@@ -54,7 +54,6 @@ const FORGE_DATA = {
     "tricep-pushdown":     { kind: "rope", why: "Split the ends past your thighs at the bottom for a full lockout. A short straight bar lets you go heavier if the rope stalls." },
     "cable-oh-tricep-ext": { kind: "rope", why: "The ends pass either side of your head and split at lockout. A bar would hit you on the way down." },
     "face-pulls":          { kind: "rope", why: "The only attachment that lets your hands split past your ears." },
-    "cable-crunch":        { kind: "rope", why: "Hold the ends beside your ears so the arms stay out of it." },
     "wide-lat-pulldown":   { kind: "lat-bar", why: "The long bar with bent ends. Hands just outside the bends." },
     "seated-cable-row":    { kind: "neutral-bar", why: "The medium one, hands about shoulder width, palms facing each other. Lets the elbows drive back past the ribs. A V-handle works if it's taken." },
     "cable-flyes":         { kind: "d-handle", count: 2, why: "One on each side, pulleys at chest height." },
@@ -192,18 +191,18 @@ const FORGE_DATA = {
           isFinisher: false
         },
         {
-          id: "cable-crunch",
-          name: "Cable Crunch",
+          id: "reverse-crunch",
+          name: "Reverse Crunch",
           sets: 3,
-          reps: "15",
+          reps: "12-15",
           rpe: "8-9",
           rest: 45,
           restLabel: "45 sec",
-          weightMode: "free",
+          weightMode: "bw",
           tier: 3,
-          image: "cable-crunch.png",
-          video: "https://www.youtube.com/results?search_query=cable+crunch+proper+form+abs",
-          tip: "Kneel facing the stack, rope beside the ears, hips locked in place. Curl the ribcage toward the pelvis. The hips must not move. If you are bowing at the hips it is a lat pulldown for your abs and does nothing.",
+          image: "reverse-crunch.png",
+          video: "https://www.youtube.com/results?search_query=reverse+crunch+proper+form",
+          tip: "Lie on a bench or the floor, hands gripping the bench behind your head or flat beside your hips, knees bent to 90. Curl the pelvis up off the pad until the knees come toward the chest, then lower for three counts. The lift comes from the abs rolling the hips, not from swinging the legs. Head and neck stay down and relaxed.",
           isFinisher: false
         },
         {
@@ -518,18 +517,18 @@ const FORGE_DATA = {
           isFinisher: false
         },
         {
-          id: "cable-crunch",
-          name: "Cable Crunch",
+          id: "pallof-press",
+          name: "Pallof Press",
           sets: 3,
-          reps: "15",
-          rpe: "8-9",
+          reps: "12-15 ea",
+          rpe: "8",
           rest: 45,
           restLabel: "45 sec",
           weightMode: "free",
           tier: 3,
-          image: "cable-crunch.png",
-          video: "https://www.youtube.com/results?search_query=cable+crunch+proper+form+abs",
-          tip: "Kneel facing the stack, rope beside the ears, hips locked in place. Curl the ribcage toward the pelvis. The hips must not move. If you are bowing at the hips it is a lat pulldown for your abs and does nothing.",
+          image: "pallof-press.png",
+          video: "https://www.youtube.com/results?search_query=pallof+press+form",
+          tip: "Cable or band at chest height, stand side-on, press straight out and resist the rotation. Nothing moves except your arms. Log the reps for one side, then match them on the other. This is anti-rotation work, which is the half of core training almost everyone skips.",
           isFinisher: false
         }
       ]
@@ -1770,7 +1769,7 @@ const FORGE_DATA = {
           tier: 2,
           image: "pallof-press.png",
           video: "https://www.youtube.com/results?search_query=pallof+press+form",
-          tip: "Cable or band at chest height, stand side-on, press straight out and resist the rotation. Nothing moves except your arms. This is anti-rotation work, which is the half of core training almost everyone skips.",
+          tip: "Cable or band at chest height, stand side-on, press straight out and resist the rotation. Nothing moves except your arms. Log the reps for one side, then match them on the other. This is anti-rotation work, which is the half of core training almost everyone skips.",
           isFinisher: false
         },
         {
@@ -1804,18 +1803,18 @@ const FORGE_DATA = {
           isFinisher: false
         },
         {
-          id: "cable-crunch",
-          name: "Cable Crunch",
+          id: "decline-plate-crunch",
+          name: "Decline Plate Crunch",
           sets: 3,
-          reps: "15",
+          reps: "12-15",
           rpe: "8-9",
           rest: 45,
           restLabel: "45 sec",
           weightMode: "free",
           tier: 3,
-          image: "cable-crunch.png",
-          video: "https://www.youtube.com/results?search_query=cable+crunch+proper+form+abs",
-          tip: "Kneel facing the stack, rope beside the ears, hips locked. Curl the ribcage toward the pelvis. The hips must not move.",
+          image: "decline-plate-crunch.png",
+          video: "https://www.youtube.com/results?search_query=decline+weighted+crunch+proper+form",
+          tip: "Feet hooked on a decline bench, plate hugged flat to the chest, never behind the head. Curl the ribs toward the pelvis, pause, lower for three counts and stop short of lying flat so the abs stay loaded. Log the plate's weight; log 0 until bodyweight is easy for 3 sets of 15. Eyes on the ceiling so the neck stays out of it.",
           isFinisher: false
         },
         {
