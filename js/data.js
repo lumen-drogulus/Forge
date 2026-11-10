@@ -71,7 +71,7 @@ const FORGE_DATA = {
       label: "Power",
       goal: "Strength — heavy compounds, low reps, long rest",
       estimatedMinutes: 62,
-      minutesBySize: { light: 30, normal: 62, extended: 88 },
+      minutesBySize: { light: 32, normal: 64, extended: 90 },
       warmup: {
         name: "Dynamic Warm-Up",
         duration: "5 minutes",
@@ -206,18 +206,18 @@ const FORGE_DATA = {
           isFinisher: false
         },
         {
-          id: "neck-isometrics",
-          name: "Neck Isometrics",
-          sets: 2,
-          reps: "4 dir x 10s",
-          rpe: "-",
-          rest: 30,
-          restLabel: "30 sec",
-          weightMode: "bw",
+          id: "supine-neck-flexion",
+          name: "Supine Neck Flexion",
+          sets: 3,
+          reps: "8-20",
+          rpe: "7",
+          rest: 45,
+          restLabel: "45 sec",
+          weightMode: "free",
           tier: 1,
-          image: "neck-isometrics.png",
-          video: "https://www.youtube.com/results?search_query=neck+isometric+exercises+for+neck+pain",
-          tip: "Palm on the forehead, push the head into it without the head actually moving. Hold 10 seconds. Repeat on the back of the head, then each side. That is one set. No load, no motion, no momentum. This builds tolerance before any weight goes near the neck.",
+          image: "supine-neck-flexion.png",
+          video: "https://www.youtube.com/results?search_query=lying+weighted+neck+flexion+tutorial",
+          tip: "Lie face-up with the head off the end of the bench, shoulders on the pad. Chin tucks toward the chest, three counts on the way back. Log 0 until bodyweight is 3 sets of 20. Then a 5 lb plate wrapped in a towel on the forehead, back down to 8-10 reps, build to 20, then 10 lbs. Any sharp pain or tingling, stop the set.",
           isFinisher: false
         }
       ]
@@ -233,7 +233,7 @@ const FORGE_DATA = {
       label: "Power",
       goal: "Strength — heavy compounds, low reps, long rest",
       estimatedMinutes: 60,
-      minutesBySize: { light: 30, normal: 60, extended: 85 },
+      minutesBySize: { light: 32, normal: 62, extended: 87 },
       warmup: {
         name: "Dynamic Warm-Up",
         duration: "5 minutes",
@@ -352,18 +352,18 @@ const FORGE_DATA = {
           isFinisher: false
         },
         {
-          id: "neck-isometrics",
-          name: "Neck Isometrics",
-          sets: 2,
-          reps: "4 dir x 10s",
-          rpe: "-",
-          rest: 30,
-          restLabel: "30 sec",
-          weightMode: "bw",
+          id: "prone-neck-extension",
+          name: "Prone Neck Extension",
+          sets: 3,
+          reps: "8-20",
+          rpe: "7",
+          rest: 45,
+          restLabel: "45 sec",
+          weightMode: "free",
           tier: 1,
-          image: "neck-isometrics.png",
-          video: "https://www.youtube.com/results?search_query=neck+isometric+exercises+for+neck+pain",
-          tip: "Palm on the forehead, push the head into it without the head actually moving. Hold 10 seconds. Repeat on the back of the head, then each side. That is one set. No load, no motion, no momentum. This builds tolerance before any weight goes near the neck.",
+          image: "prone-neck-extension.png",
+          video: "https://www.youtube.com/results?search_query=lying+weighted+neck+extension+tutorial",
+          tip: "Face-down, head off the end of the bench. Look up slowly, lower for three counts. Log 0 until bodyweight is 3 sets of 20. Then a 5 lb plate wrapped in a towel on the back of the head, back down to 8-10 reps, build to 20, then 10 lbs. Pairs with neck flexion on the push days so the neck gets balanced work front and back. Sharp pain or tingling means stop, not push through.",
           isFinisher: false
         },
         {
@@ -396,7 +396,7 @@ const FORGE_DATA = {
       label: "Power",
       goal: "Strength — heavy compounds, low reps, long rest",
       estimatedMinutes: 58,
-      minutesBySize: { light: 30, normal: 58, extended: 82 },
+      minutesBySize: { light: 33, normal: 61, extended: 85 },
       warmup: {
         name: "Dynamic Warm-Up",
         duration: "5 minutes",
@@ -529,6 +529,21 @@ const FORGE_DATA = {
           image: "pallof-press.png",
           video: "https://www.youtube.com/results?search_query=pallof+press+form",
           tip: "Cable or band at chest height, stand side-on, press straight out and resist the rotation. Nothing moves except your arms. Log the reps for one side, then match them on the other. This is anti-rotation work, which is the half of core training almost everyone skips.",
+          isFinisher: false
+        },
+        {
+          id: "side-neck-raise",
+          name: "Side Neck Raise",
+          sets: 2,
+          reps: "8-15 ea",
+          rpe: "7",
+          rest: 45,
+          restLabel: "45 sec",
+          weightMode: "free",
+          tier: 1,
+          image: "side-neck-raise.png",
+          video: "https://www.youtube.com/results?search_query=side+lying+neck+lateral+flexion+bench",
+          tip: "Lie on your side on a bench, bottom shoulder on the pad, head off the end. Let the ear sink toward the floor, then raise it toward the top shoulder. The shoulders do not move. Log 0 until bodyweight is 20 clean reps with a three-count lowering, then hold a 5 lb plate in a towel against the temple and drop back to 8. Do both sides and log the reps for one. Sharp pain or tingling, stop the set.",
           isFinisher: false
         }
       ]
@@ -684,7 +699,7 @@ const FORGE_DATA = {
           id: "supine-neck-flexion",
           name: "Supine Neck Flexion",
           sets: 3,
-          reps: "12",
+          reps: "8-20",
           rpe: "7",
           rest: 45,
           restLabel: "45 sec",
@@ -692,7 +707,7 @@ const FORGE_DATA = {
           tier: 1,
           image: "supine-neck-flexion.png",
           video: "https://www.youtube.com/results?search_query=lying+weighted+neck+flexion+tutorial",
-          tip: "Lie face-up with the head off the end of the bench. Log 0 and use bodyweight only for the first 3-4 weeks. Chin tucks toward the chest, slow down on the way back. When you add a plate, wrap it in a towel and start at 2.5 lbs. Any sharp pain or tingling, stop the set.",
+          tip: "Lie face-up with the head off the end of the bench, shoulders on the pad. Chin tucks toward the chest, three counts on the way back. Log 0 until bodyweight is 3 sets of 20. Then a 5 lb plate wrapped in a towel on the forehead, back down to 8-10 reps, build to 20, then 10 lbs. Any sharp pain or tingling, stop the set.",
           isFinisher: false
         }
       ]
@@ -849,15 +864,15 @@ const FORGE_DATA = {
           id: "prone-neck-extension",
           name: "Prone Neck Extension",
           sets: 3,
-          reps: "12",
+          reps: "8-20",
           rpe: "7",
           rest: 45,
           restLabel: "45 sec",
           weightMode: "free",
           tier: 1,
           image: "prone-neck-extension.png",
-          video: "https://www.youtube.com/results?search_query=prone+weighted+neck+extension+tutorial",
-          tip: "Face-down, head off the bench. Bodyweight only to start, log 0. Look up slowly, lower slower. Pairs with supine flexion on the other push day so the neck gets balanced work front and back. Same rule: sharp pain means stop, not push through.",
+          video: "https://www.youtube.com/results?search_query=lying+weighted+neck+extension+tutorial",
+          tip: "Face-down, head off the end of the bench. Look up slowly, lower for three counts. Log 0 until bodyweight is 3 sets of 20. Then a 5 lb plate wrapped in a towel on the back of the head, back down to 8-10 reps, build to 20, then 10 lbs. Pairs with neck flexion on the push days so the neck gets balanced work front and back. Sharp pain or tingling means stop, not push through.",
           isFinisher: false
         }
       ]
@@ -873,7 +888,7 @@ const FORGE_DATA = {
       label: "Hypertrophy",
       goal: "Volume — moderate loads, higher reps, controlled tempos",
       estimatedMinutes: 62,
-      minutesBySize: { light: 30, normal: 62, extended: 86 },
+      minutesBySize: { light: 33, normal: 65, extended: 89 },
       warmup: {
         name: "Dynamic Warm-Up",
         duration: "5 minutes",
@@ -1023,6 +1038,21 @@ const FORGE_DATA = {
           image: "back-extension.png",
           video: "https://www.youtube.com/results?search_query=45+degree+back+extension+proper+form",
           tip: "Log 0 until bodyweight is easy for 3 sets of 15, then hold a plate to the chest. Hinge at the hips, not the spine. Rise until the body is a straight line and STOP. Hyperextending past that is how you turn a prehab exercise into the thing that hurt you.",
+          isFinisher: false
+        },
+        {
+          id: "side-neck-raise",
+          name: "Side Neck Raise",
+          sets: 2,
+          reps: "8-15 ea",
+          rpe: "7",
+          rest: 45,
+          restLabel: "45 sec",
+          weightMode: "free",
+          tier: 1,
+          image: "side-neck-raise.png",
+          video: "https://www.youtube.com/results?search_query=side+lying+neck+lateral+flexion+bench",
+          tip: "Lie on your side on a bench, bottom shoulder on the pad, head off the end. Let the ear sink toward the floor, then raise it toward the top shoulder. The shoulders do not move. Log 0 until bodyweight is 20 clean reps with a three-count lowering, then hold a 5 lb plate in a towel against the temple and drop back to 8. Do both sides and log the reps for one. Sharp pain or tingling, stop the set.",
           isFinisher: false
         }
       ]
@@ -1836,7 +1866,7 @@ const FORGE_DATA = {
           id: "prone-neck-extension",
           name: "Prone Neck Extension",
           sets: 3,
-          reps: "12",
+          reps: "8-20",
           rpe: "7",
           rest: 45,
           restLabel: "45 sec",
@@ -1844,7 +1874,7 @@ const FORGE_DATA = {
           tier: 3,
           image: "prone-neck-extension.png",
           video: "https://www.youtube.com/results?search_query=prone+weighted+neck+extension+tutorial",
-          tip: "Face-down, head off the bench. Bodyweight only to start, log 0. Look up slowly, lower slower. Sharp pain means stop, not push through.",
+          tip: "Face-down, head off the end of the bench. Look up slowly, lower for three counts. Log 0 until bodyweight is 3 sets of 20, then a 5 lb plate wrapped in a towel on the back of the head, back down to 8-10 reps. Sharp pain or tingling means stop, not push through.",
           isFinisher: false
         }
       ]
